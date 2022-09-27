@@ -1,0 +1,1365 @@
+---
+title: "Suni's Weekly FDA Analysis Check-in Progress -- Pupil Light Reflex"
+author: "SG"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: lumen
+---
+
+# To Do: 
+1. Create analytic data set with the same individuals in post and within person difference data sets
+2. AUC with top PCs
+  + Use backward selection to select the best set of PC for prediction
+3. Sub-group analysis
+  + For demographic variables correlated with PCs
+4. Interpret PC3?
+  + Post data PC3 associated with Smoking status
+  + Within Diff data PC3 associated with Smoking status
+5. Look into models with different N -- missing data?
+6. Write down mathematical interpretation of the plots. 
+7. Function on Scalar Regression (use class notes)
+  + Model: $Y_{ij}(t) = f_0(t) + f_1(t)I(user = Occassional) +f_2(t)I(user == Daily) + b_{ij}(t) + e_{ij}(t)$
+    + $b_{ij}(t)$ is a random effect (RE) for subject, start modeling with independence assumption between pt-time points and then incorporate RE later
+8. Compare scalar vs functional AUC curves (need scalar features from Ben)
+
+# Task Worked On From Last Week:
+1. Remove subjects with known mis-alignment
+2. Build logistic regression models with PC scores to predict smoker vs non-smoker. Plot AUC
+  + No train/test samples
+  + Run PCA on post data only and fit logistic regression models + AUC (top 4 PCs)
+  + Fit logistic regression models + AUC on within person difference data (top 4 PCs)
+3. FOCUS on fPCA: Exploratory analyses
+  a. Are PC scores associated with demog variables, time from smoking to test or THC user category?
+4. Revise interpretation of +/- 2 SD functions for PC1 & PC2 for within subject difference of percent change.
+  + Plot out pre, post and difference for subjects with high/low scores on each PC to get a better interpretation of the PC
+
+## Comments for Ben
++ Correcting export error leading to NA in frame numbers
++ Potentially misaligned data
+  + 001-109-pre2
+  + 001-060-post 
+  + 001-007-pre2: start at 2nd bump? *-- reviewed by Ben*
+  + 001-033-pre2: odd pattern *-- reviewed by Ben*
+  + 001-038-pre2: odd pattern *-- reviewed by Ben*
+  + 001-043-pre2/post: both look odd; mainly check pre2; maybe review videos
++ Frames removed (outliers)
+  + Should be a way to have a value for every frame?
++ Ask for scalar features 
+  
+## Notes 
+1. Send HTML of Rmarkdown to JW & AL by Tuesday night
+2. Ask quick questions through email (e.g. components of objects or error messages)
+3. Add PURPOSE and INTERPRETATIONS for each plot
+4. chart.Correlation fxn
+  + '***: p < 0.001
+  + '**: p < 0.01
+  + '*: p < 0.05
+  + '.: p < 0.10
+
+# Background
+Pupil size light reflex to a light test is a potential test to determine a person is under the influence of THC and be able to be use as a field sobriety measures. The goals of the analysis to: 
+
+## Potential Topics
+1. Determine the variability of pupil light reflex in a sober population
+2. Determine the effectiveness of pupil light reflex to measure sobriety after smoking THC 
+    Question - dose response?
+3. Jointly model pupil light reflex and blink rate during a light test (another data set)
+
+Pupil size light reflex to light does not habituated to THC use (smoking).
+
+Time for smoking to post test maybe an important variable to model b/c: 
+
++ effects of THC reduce with time
++ currently time from smoke period to post are all similar so we might not see an effect
+
+There is a circadian pattern to pupil size (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7445830/). 
+
+## Experimental Design
++ Setting: Office
+  + Were the lights ON/OFF during testing (JW)
+
+## Features of Importance
+1. Point of maximal constriction -- more dilation after smoking
+2. Rebound dilation
++ Ideally the non-user data should have little change from pre to post but there may be some "habituation" to the test?
+
+*Currently this field does not use FDA, so any FDA in topic area may be publishable*
+
+# Data summary
+Data on pupil size during light reflex test. Pupil size was extracted at the image level based on image analysis techniques. Each test was performed simultaneously on right and left eye before and after THC use (smoking).
+
++ USE percent change for analysis
++ Start at frame 0 
++ End of test is not strictly defined (with FoS we shouldn't need to define the end of the test)
+
+# FDA analysis pointers: 
+1. Usually only interpret PC1 & PC2, check the percent of variance explained and decide from that if interpreting later PCs is important
+2. For prediction models: higher order PCs might be more useful
+
+## Questions: 
+1. Can we translate frame into time? Do we need to? -- No need to translate to time dimension, also time drift shouldn't be an issue because duration of test is short
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(openxlsx)
+library(ggplot2)
+library(table1)
+library(refund)
+library(refund.shiny)
+library(pROC)
+library(stringr)
+library(PerformanceAnalytics)
+library(gam)
+
+# ps_folder <- "C:/Repositories/Dissertation/PupilSize_img"
+data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data"
+# data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data"
+ps_folder <- "202208_PupilLightReflex"
+```
+
+# Data Preparation
+```{r dataReadIn}
+ps <- read.csv(file.path(data_folder, ps_folder, "pupil_data_with_demo.csv"))
+
+ps$demo_gender <- factor(ps$demo_gender, 
+                         levels = c(1,2), 
+                         labels = c("Male", "Female"))
+
+ps$user_cat <- NA
+ps$user_cat[ps$user_type == "non-user"] <- 0
+ps$user_cat[ps$user_type == "occasional"] <- 1
+ps$user_cat[ps$user_type == "daily"] <- 2
+
+ps$user_cat <- factor(ps$user_cat, 
+                      levels = c(0,1,2), 
+                      labels = c("non-user", 
+                                 "occasional", 
+                                 "daily"))
+
+ps$tp <- NA
+ps$tp[ps$time == "pre2"] <- 0
+ps$tp[ps$time == "post"] <- 1
+
+ps$tp <- factor(ps$tp, 
+                levels = c(0,1), 
+                labels = c("pre2", "post"))
+
+# str(ps)
+
+#impute frame number 
+for(i in 2:(nrow(ps)-1)){
+  if(is.na(ps$frame[i]) & is.na(ps$frame[i+1] - ps$frame[i-1])){
+    ps$frame[i] <- ps$frame[i-1]+1
+  }else(if(is.na(ps$frame[i]) & (ps$frame[i+1] - ps$frame[i-1]) == 2){
+    ps$frame[i] <- ps$frame[i-1]+1
+  }else(if(is.na(ps$frame[i]) & (ps$frame[i+1] - ps$frame[i-1]) > 2){
+    if(abs(ps$percent_change[i] - ps$percent_change[i-1]) <
+       abs(ps$percent_change[i+1] - ps$percent_change[i])){
+      ps$frame[i] <- ps$frame[i-1]+1
+    }else(ps$frame[i] <- ps$frame[i+1]-1)
+    }
+    )
+  )
+}
+```
+
+```{r pt_summ}
+# total number of subjects
+length(unique(ps$subject_id))
+
+# subject level data 
+pt.df <- unique(ps[, c("subject_id", "tp", "user_cat", "demo_age", 
+                "demo_weight", "demo_height", "demo_gender", "thc")])
+
+# # Demographics Table by User Category
+# table1(~ demo_age + demo_weight + demo_height + demo_gender|user_cat, 
+#        data = pt.df[pt.df$tp == "pre2", ])
+
+# number of subjects by timepoint (pre/post)
+table(pt.df$tp)
+```
+
+There are more subjects in total than the by time point. Indicating incomplete data with some subjects missing "pre" and others missing "post" measurement. 
+
+Reshape participant demog data to perserve pre and post thc levels
+```{r ptdf_reshape}
+pt.df.w <- reshape(pt.df, 
+                   timevar = "tp", 
+                   idvar = c("subject_id", "user_cat", "demo_age", 
+                             "demo_weight", "demo_height", "demo_gender"), 
+                   direction = "wide")
+pt.df.w$thc.post[pt.df.w$user_cat == "non-user" & is.na(pt.df.w$thc.post)] <- 0
+pt.df.w$thc_chg <- pt.df.w$thc.post - pt.df.w$thc.pre2
+pt.df.w$BMI <- pt.df.w$demo_weight*703/(pt.df.w$demo_height)^2
+```
+
+## Add time from smoking to post test
+```{r readIn_testTimes}
+## Need to work on; time formatted in Excel file.
+testTimes <- read.xlsx(file.path(data_folder, ps_folder, "All SafetyScan Times_23Aug2022_revSG.xlsx"), 
+                       sheet = "Raw")
+
+testTimes$pre_safetyscan_date_convert <- as.Date(testTimes$pre_safetyscan_date, origin = "1899-12-30")
+
+testTimes$pre_safetyscan_time_convert <- as.POSIXct(paste0(testTimes$pre_safetyscan_date_convert, " ", testTimes$pre_safetyscan_time_hr, ":", testTimes$pre_safetyscan_time_min, ":", "00"), format = "%Y-%m-%d %H:%M:%S")
+
+testTimes$consump_start_time_convert <- as.POSIXct(paste0(testTimes$pre_safetyscan_date_convert, " ", testTimes$consump_start_time_hr, ":", testTimes$consump_start_time_min, ":", "00"), format = "%Y-%m-%d %H:%M:%S")
+
+testTimes$consump_end_time_convert <- as.POSIXct(paste0(testTimes$pre_safetyscan_date_convert, " ", testTimes$consump_end_time_hr, ":", testTimes$consump_end_time_min, ":", "00"), format = "%Y-%m-%d %H:%M:%S")
+
+testTimes$post_safetyscan_time_convert <- as.POSIXct(paste0(testTimes$pre_safetyscan_date_convert, " ", testTimes$post_safetyscan_time_hr, ":", testTimes$post_safetyscan_time_min, ":", "00"), format = "%Y-%m-%d %H:%M:%S")
+
+testTimes$postConsumpTimeToTest <- as.numeric(difftime(testTimes$post_safetyscan_time_convert,
+                                                       testTimes$consump_end_time_convert,
+                                                       units = "mins"))
+testTimes$remove <- ifelse(testTimes$subject_id == "001-056" & is.na(testTimes$postConsumpTimeToTest), 1, 0)
+testTimes <- testTimes[testTimes$remove == 0, ]
+
+pt.df <- merge(pt.df.w, testTimes[, c("subject_id", "postConsumpTimeToTest")], 
+               by = "subject_id")
+ps <- merge(ps, testTimes[, c("subject_id", "postConsumpTimeToTest")], 
+               by = "subject_id")
+
+non_user.id <- pt.df$subject_id[pt.df$user_cat == "non-user"]
+# View(testTimes[testTimes$subject_id %in% non_user.id, ])
+```
+
+## Table 1
+No Consumption end time recorded for non-users
+```{r tab1}
+# Demographics Table by User Category
+table1(~ demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest|user_cat, 
+       data = pt.df)
+```
+
+
+### Find potential mis-aligned data streams
+I'm looking for any sharp declines over 10 frames after the 150th frame and then visualizing those trajectories to determine if there might be misalignment of the light test start frame. 
+
+```{r misAligned}
+ps$lagPctChg <- c(rep(0, 10), diff(ps$percent_change, lag = 10))
+ps$lagID <- dplyr::lag(ps$subject_id, 10)
+ps$lagtime <- dplyr::lag(ps$time, 10)
+ps$lagEye <- dplyr::lag(ps$eye, 10)
+
+ps$lagPctChg <- ifelse(ps$subject_id == ps$lagID & ps$time == ps$lagtime & ps$eye == ps$lagEye, 
+                       ps$lagPctChg, 0)
+
+summary(ps$lagPctChg[ps$frame > 150])
+
+hist(ps$lagPctChg[ps$frame > 150], breaks = 1000)
+
+ps.150 <- ps[ps$frame > 150  & ps$eye == "Right", ]
+
+pot.misaligned <- unique(ps.150[ps.150$lagPctChg <= -5,  c("subject_id", "time", "user_type", "eye")])
+pot.misaligned <- pot.misaligned[!(is.na(pot.misaligned$subject_id)), ]
+pot.misaligned$misaligned  <- 1
+
+misaligned <- merge(ps, pot.misaligned,
+                    by= c("subject_id", "time", "user_type", "eye"), 
+                    all.y = T)
+
+mis.right <- misaligned[misaligned$eye == "Right", ]
+
+misAlign.id <- unique(misaligned$subject_id)
+
+for(i in misAlign.id){
+  print(ggplot(mis.right[mis.right$subject_id == i, ], 
+                              aes(x=frame, y = percent_change, 
+                                  group = subject_id, color = i))+
+                        geom_line()+
+                        facet_grid(rows = vars(subject_id), cols = vars(tp))+
+                        labs(title = paste0("Potential MisAligned Subject: ", i))+
+                        theme_bw())
+}
+
+
+# jpeg(file.path(ps_folder, "Potential_Misaligned_001_109.jpg"), 
+#      width = 12, height = 5, units = "in", res = 300)
+# ggplot(mis.right[mis.right$subject_id == "001-109", ], 
+#        aes(x=frame, y = percent_change, group = subject_id, color = subject_id))+
+#   geom_line()+
+#   facet_grid(rows = vars(subject_id), cols = vars(tp))+
+#   labs(title = "Potential MisAligned ")+
+#   theme_bw()
+# dev.off()
+
+# jpeg(file.path(ps_folder, "Potential_Misaligned_001_060.jpg"),
+#      width = 12, height = 5, units = "in", res = 300)
+# ggplot(mis.right[mis.right$subject_id == "001-060", ],
+#        aes(x=frame, y = percent_change, group = subject_id, color = subject_id))+
+#   geom_line()+
+#   facet_grid(rows = vars(subject_id), cols = vars(tp))+
+#   labs(title = "Potential MisAligned ")+
+#   theme_bw()
+# dev.off()
+
+### New alignment view
+
+# jpeg(file.path(ps_folder, "Potential_Misaligned_001_007.jpg"),
+#      width = 12, height = 5, units = "in", res = 300)
+# ggplot(mis.right[mis.right$subject_id == "001-007", ],
+#        aes(x=frame, y = percent_change, group = subject_id, color = subject_id))+
+#   geom_line()+
+#   facet_grid(rows = vars(subject_id), cols = vars(tp))+
+#   labs(title = "Potential MisAligned: start at 2nd bump?")+
+#   theme_bw()
+# dev.off()
+# 
+# jpeg(file.path(ps_folder, "Potential_Misaligned_001_033.jpg"),
+#      width = 12, height = 5, units = "in", res = 300)
+# ggplot(mis.right[mis.right$subject_id == "001-033", ],
+#        aes(x=frame, y = percent_change, group = subject_id, color = subject_id))+
+#   geom_line()+
+#   facet_grid(rows = vars(subject_id), cols = vars(tp))+
+#   labs(title = "Potential MisAligned: Odd pattern")+
+#   theme_bw()
+# dev.off()
+# 
+# jpeg(file.path(ps_folder, "Potential_Misaligned_001_038.jpg"),
+#      width = 12, height = 5, units = "in", res = 300)
+# ggplot(mis.right[mis.right$subject_id == "001-038", ],
+#        aes(x=frame, y = percent_change, group = subject_id, color = subject_id))+
+#   geom_line()+
+#   facet_grid(rows = vars(subject_id), cols = vars(tp))+
+#   labs(title = "Potential MisAligned: Odd pattern")+
+#   theme_bw()
+# dev.off()
+# 
+# jpeg(file.path(ps_folder, "Potential_Misaligned_001_043.jpg"),
+#      width = 12, height = 5, units = "in", res = 300)
+# ggplot(mis.right[mis.right$subject_id == "001-043", ],
+#        aes(x=frame, y = percent_change, group = subject_id, color = subject_id))+
+#   geom_line()+
+#   facet_grid(rows = vars(subject_id), cols = vars(tp))+
+#   labs(title = "Potential MisAligned: Both look odd, but mainly check pre; maybe review video")+
+#   theme_bw()
+# dev.off()
+```
+
+Remove Outliers
+```{r outliers}
+## Remove known outliers
+ps$outliers <- 0
+ps$outliers[ps$subject_id == "001-109" & ps$tp == "pre2"] <- 1
+ps$outliers[ps$subject_id == "001-060" & ps$tp == "post"] <- 1
+
+ps <- ps[ps$outliers == 0, ]
+```
+
+
+## Data Visualization
+Plot of Pupil Size and Percent Change for "PRE" data by Eye and User Category
+```{r pre_plots}
+pre.df <- ps[ps$tp == "pre2", ] 
+
+ggplot(pre.df, aes(x=frame, y = pupil_size, group = subject_id, color = subject_id))+
+  geom_line(show.legend = FALSE)+
+  facet_grid(rows = vars(user_cat), cols = vars(eye))+
+  labs(title ="Pupil Size by Eye and THC use category")+
+  theme_bw()
+
+
+ggplot(pre.df, aes(x=frame, y = percent_change, group = subject_id, color = subject_id))+
+  geom_line(show.legend = FALSE)+
+  facet_grid(rows = vars(user_cat), cols = vars(eye))+
+  labs(title = "Percent Change by Eye and THC use category")+
+  theme_bw()
+```
+
+Plot of PRE/POST for Right Eye
+```{r rightEye_plots}
+right.df <- ps[ps$eye == "Right", ]
+
+ggplot(right.df, aes(x=frame, y = pupil_size, group = subject_id, color = subject_id))+
+  geom_line(show.legend = FALSE)+
+  facet_grid(rows = vars(user_cat), cols = vars(tp))+
+  labs(title ="Pupil Size by Pre/Post and THC use category")+
+  theme_bw()
+
+ggplot(right.df, aes(x=frame, y = percent_change, group = subject_id, color = subject_id))+
+  geom_line(show.legend = FALSE)+
+  facet_grid(rows = vars(user_cat), cols = vars(tp))+
+  labs(title = "Percent Change by Pre/Post and THC use category")+
+  theme_bw()
+```
+
+Plots of Left and Right Eye for "POST" data. One pt has negative values for pupil size.
+```{r post_plots}
+post.df <- ps[ps$tp == "post", ] 
+
+ggplot(post.df, aes(x=frame, y = pupil_size, group = subject_id, color = subject_id))+
+  geom_line(show.legend = FALSE)+
+  facet_grid(rows = vars(user_cat), cols = vars(eye))+
+  labs(title ="Pupil Size by Eye and THC use category")+
+  theme_bw()
+
+
+ggplot(post.df, aes(x=frame, y = percent_change, group = subject_id, color = subject_id))+
+  geom_line(show.legend = FALSE)+
+  facet_grid(rows = vars(user_cat), cols = vars(eye))+
+  labs(title = "Percent Change by Eye and THC use category")+
+  theme_bw()
+```
+
+
+
+
+
+# Exploratory Analysis
+
+## Over all subjects and timepoints
+
+### Mean Function
+Plot the Mean and +/- 1 SD functions for the percent change in pupil light reflex data for the pre and post data by THC user category. (Added code to input frame numbers when NA). 
+
+```{r mean_sd_functions}
+right_0.df <- right.df[right.df$frame >= 0, c("subject_id", "tp", "user_cat", 
+                                              "frame", "percent_change")]
+
+
+right_0.w <- reshape(right_0.df, 
+                     timevar = "frame", 
+                     idvar = c("subject_id", "tp", "user_cat"), 
+                     direction = "wide")
+
+rownames(right_0.w) <- paste0(right_0.w$subject_id, "_", right_0.w$tp)
+pct_chg <- names(right_0.w[, 4:602])
+
+mean_fxn <- as.data.frame(aggregate(right_0.w[, 4:602], 
+                                    list(right_0.w$tp, 
+                                         right_0.w$user_cat),
+                                    FUN = function(x) mean(x, na.rm = T)))
+
+mean_fxn.l <- reshape(mean_fxn, 
+                      varying = pct_chg, 
+                      v.names = "percent_change", 
+                      timevar = "frame", 
+                      times = pct_chg, 
+                      direction = "long")
+mean_fxn.l$frame <- as.numeric(gsub("percent_change.", "", mean_fxn.l$frame))
+rownames(mean_fxn.l) <- NULL
+mean_fxn.l$id <- NULL
+
+names(mean_fxn.l)[names(mean_fxn.l) == "Group.1"] <- "tp"
+names(mean_fxn.l)[names(mean_fxn.l) == "Group.2"] <- "user_cat"
+
+
+mean_fxn.l$grp <- paste0(mean_fxn.l$tp, "_", mean_fxn.l$user_cat)
+
+ggplot(mean_fxn.l, aes(x=frame, y = percent_change, group = grp,  
+                       color = user_cat))+
+  geom_line()+
+  facet_grid(rows = vars(tp))+
+  labs(title = "Average Percent Change by Pre/Post and THC use category")+
+  theme_bw()
+
+sd_fxn <- as.data.frame(aggregate(right_0.w[, 4:602], 
+                                    list(right_0.w$tp, 
+                                         right_0.w$user_cat),
+                                    FUN = function(x) sd(x, na.rm = T)))
+
+```
+NA's are when there's no data in for that time point and user category. Min frame value for NA is 480. 
+
+### fPCA all subjects and timepoints
+```{r fPCA_all}
+right_0.fpca <- fpca.face(Y = as.matrix(right_0.w[, 4:602]), pve = 0.95, knots = 30, var = T)
+# str(right_0.fpca)
+
+# plot_shiny(right_0.fpca)
+right_0.fpca.pve <- round(right_0.fpca$evalues/sum(right_0.fpca$evalues)*100, 2)
+mu <- right_0.fpca$mu
+right_sd <- sqrt(right_0.fpca$evalues)
+right_Phi <- right_0.fpca$efunctions
+
+df_plot <- data.frame(frame = seq(0, 598, by = 1), 
+                      mu = mu, 
+                      errband1 = 2*right_Phi[, 1]*right_sd[1], 
+                      errband2 = 2*right_Phi[, 2]*right_sd[2], 
+                      errband3 = 2*right_Phi[, 3]*right_sd[3], 
+                      errband4 = 2*right_Phi[, 4]*right_sd[4])
+
+colors <- c("Pop.Mean" = "black", "+2SD" = "red", "-2SD" = "blue")
+
+plot_pc1 <- ggplot(data = df_plot, aes(x = frame, y = mu))+
+  geom_line(aes(color = "Pop.Mean"))+
+  geom_line(aes(x = frame, y = mu+errband1, color = "+2SD"))+
+  geom_line(aes(x = frame, y = mu-errband1, color = "-2SD"))+
+  labs(x = "frame", 
+       y = "Percent Change", 
+       color = "Legend", 
+       title = paste("PC1:", "% Var Explained:", right_0.fpca.pve[1]))+
+  scale_color_manual(values = colors)+
+  theme_bw()
+
+plot_pc2 <- ggplot(data = df_plot, aes(x = frame, y = mu))+
+  geom_line(aes(color = "Pop.Mean"))+
+  geom_line(aes(x = frame, y = mu+errband2, color = "+2SD"))+
+  geom_line(aes(x = frame, y = mu-errband2, color = "-2SD"))+
+  labs(x = "frame", 
+       y = "Percent Change", 
+       color = "Legend", 
+       title = paste("PC2:", "% Var Explained:", right_0.fpca.pve[2]))+
+  scale_color_manual(values = colors)+
+  theme_bw()
+
+plot_pc3 <- ggplot(data = df_plot, aes(x = frame, y = mu))+
+  geom_line(aes(color = "Pop.Mean"))+
+  geom_line(aes(x = frame, y = mu+errband3, color = "+2SD"))+
+  geom_line(aes(x = frame, y = mu-errband3, color = "-2SD"))+
+  labs(x = "frame", 
+       y = "Percent Change", 
+       color = "Legend", 
+       title = paste("PC3:", "% Var Explained:", right_0.fpca.pve[3]))+
+  scale_color_manual(values = colors)+
+  theme_bw()
+
+plot_pc4 <- ggplot(data = df_plot, aes(x = frame, y = mu))+
+  geom_line(aes(color = "Pop.Mean"))+
+  geom_line(aes(x = frame, y = mu+errband4, color = "+2SD"))+
+  geom_line(aes(x = frame, y = mu-errband4, color = "-2SD"))+
+  labs(x = "frame", 
+       y = "Percent Change", 
+       color = "Legend", 
+       title = paste("PC4:", "% Var Explained:", right_0.fpca.pve[4]))+
+  scale_color_manual(values = colors)+
+  theme_bw()
+```
+
+```{r plot_overallPC1}
+plot_pc1
+```
+
+*PC1 plot: Individuals with low loading on PC1 (-2SD) have less constriction than the average and individuals with a high loading (+2SD) have more constriction. Rebound effect? *
+
+```{r plot_overallPC2}
+plot_pc2
+```
+
+*PC2 plot: Overall shape of trajectory & pattern of recovery*
+
+Plot individuals with high/low PC2 overall scores. 
+```{r plot_highPC2}
+right_scores <- right_0.fpca$scores
+q.95 <- quantile(right_scores[, 2], p = 0.95)
+
+highPC2 <- rownames(right_scores)[right_scores[, 2] > q.95]
+
+highPC2.df <- data.frame(subject_id = substr(highPC2, 1, 7), 
+                         tp = substr(highPC2, 9,12))
+
+
+for(i in 1:nrow(highPC2.df)){
+  plot.df <- right_0.df[right_0.df$subject_id == highPC2.df$subject_id[i] & right_0.df$tp == highPC2.df$tp[i], ]
+  print(ggplot(plot.df, aes(x=frame, y = percent_change, group = subject_id, color = subject_id))+
+          geom_line(show.legend = FALSE)+
+          labs(title = paste("Percent Change for high PC2 score --", "Subject:", highPC2.df$subject_id[i], "Timepoint:",                                      highPC2.df$tp[i]))+
+          theme_bw())
+}
+```
+
+```{r lowPC2Scores}
+q.05 <- quantile(right_scores[, 2], p = 0.05)
+
+lowPC2 <- rownames(right_scores)[right_scores[, 2] < q.05]
+
+lowPC2.df <- data.frame(subject_id = substr(lowPC2, 1, 7), 
+                         tp = substr(lowPC2, 9,12))
+
+
+for(i in 1:nrow(lowPC2.df)){
+  plot.df <- right_0.df[right_0.df$subject_id == lowPC2.df$subject_id[i] & right_0.df$tp == lowPC2.df$tp[i], ]
+  print(ggplot(plot.df, aes(x=frame, y = percent_change, group = subject_id, color = subject_id))+
+          geom_line(show.legend = FALSE)+
+          labs(title = paste("Percent Change for low PC2 score --", "Subject:", lowPC2.df$subject_id[i], "Timepoint:",                                      lowPC2.df$tp[i]))+
+          theme_bw())
+}
+
+```
+
+
+```{r plot_overallPC3}
+plot_pc3
+```
+
+```{r plot_overallPC4}
+plot_pc4
+```
+
+## Create Analytic Sample
+
+```{r analyticN}
+right_0.post <- right_0.df[right_0.df$tp == "post", ]
+post.ids <- unique(right_0.post$subject_id)
+
+right_0.post.w <- reshape(right_0.post, 
+                          timevar = "frame", 
+                          idvar = c("subject_id", "tp", "user_cat"), 
+                          direction = "wide")
+post.vars <- names(right_0.post.w)[4:ncol(right_0.post.w)]
+
+right_0.pt <- reshape(right_0.df, 
+                      timevar = "tp", 
+                      idvar = c("subject_id", "user_cat", "frame"), 
+                      direction = "wide")
+
+right_0.pt$wiPctChg <- right_0.pt$percent_change.post - right_0.pt$percent_change.pre2
+
+right_0.pt <- right_0.pt[, c("subject_id", "user_cat", "frame", "wiPctChg")]
+
+right_0.pt.w <- reshape(right_0.pt, 
+                     timevar = "frame", 
+                     idvar = c("subject_id", "user_cat"), 
+                     direction = "wide")
+
+# remove rows where all data is missing (e.g. pt didn't have both pre and post)
+allMissing <- rowSums(is.na(right_0.pt.w[, 3:601]))
+rowsAllMissing <- names(allMissing)[allMissing == 599]
+
+right_0.pt.w <- right_0.pt.w[!(rownames(right_0.pt.w) %in% rowsAllMissing), ]
+
+rownames(right_0.pt.w) <- paste0(right_0.pt.w$subject_id, "_", right_0.pt.w$user_cat)
+
+analytic.N <- post.ids[post.ids %in% right_0.pt.w$subject_id]
+
+## Filter all datasets to analytic sample
+
+right_0.df <- right_0.df[right_0.df$subject_id %in% analytic.N,]
+right_0.post <- right_0.post[right_0.post$subject_id %in% analytic.N, ]
+right_0.post.w <- right_0.post.w[right_0.post.w$subject_id %in% analytic.N ,]
+row.names(right_0.post.w) <- right_0.post.w$subject_id
+right_0.pt <- right_0.pt[right_0.pt$subject_id %in% analytic.N, ]
+right_0.pt.w <- right_0.pt.w[right_0.pt.w$subject_id %in% analytic.N, ]
+row.names(right_0.pt.w) <- right_0.pt.w$subject_id
+```
+
+No Consumption end time recorded for non-users
+```{r tab1_analyticN}
+# Demographics Table by User Category
+table1(~ demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest|user_cat, 
+       data = pt.df[pt.df$subject_id %in% analytic.N, ])
+```
+
+
+## Post Data 
+```{r postPlot}
+ggplot(right_0.post, aes(x=frame, y = percent_change, group = subject_id, color = subject_id))+
+  geom_line(show.legend = FALSE)+
+  facet_grid(rows = vars(user_cat))+
+  labs(title ="POST data percent change by THC use category")+
+  theme_bw()
+```
+## Within Subject 
+### Mean function
+
+Calculate the difference (post-pre) within subjects and plot by THC user category
+
+```{r wi_subj_mean}
+ggplot(right_0.pt, aes(x=frame, y = wiPctChg, group = subject_id, color = subject_id))+
+  geom_line(show.legend = FALSE)+
+  facet_grid(rows = vars(user_cat))+
+  labs(title ="Within subject difference in percent change by THC use category")+
+  theme_bw()
+```
+*Non-user plot seems "centered" around 0 but still showing heterogeneity. Lots of heterogeneity across user-groups, but a mostly positive difference.*
+
+## Plot the mean and +/- 1 SD functions for within subject different in percent change
+```{r wi_mean_fxn}
+mean_fxn.pt <- as.data.frame(aggregate(right_0.pt.w[, 3:601], 
+                                    list(right_0.pt.w$user_cat),
+                                    FUN = function(x) mean(x, na.rm = T)))
+wiPctChg <- names(right_0.pt.w)[3:601]
+
+mean_fxn.pt.l <- reshape(mean_fxn.pt, 
+                      varying = wiPctChg, 
+                      v.names = "wi_percent_change", 
+                      timevar = "frame", 
+                      times = wiPctChg, 
+                      direction = "long")
+
+mean_fxn.pt.l$frame <- as.numeric(gsub("wiPctChg.", "", mean_fxn.pt.l$frame))
+rownames(mean_fxn.pt.l) <- NULL
+mean_fxn.pt.l$id <- NULL
+
+names(mean_fxn.pt.l)[names(mean_fxn.pt.l) == "Group.1"] <- "user_cat"
+
+ggplot(mean_fxn.pt.l, aes(x=frame, y = wi_percent_change, group = user_cat, color = user_cat))+
+  geom_line()+
+  labs(title ="Average Within subject difference in percent change by THC use category")+
+  theme_bw()
+```
+
+*Difference in trajectories (post-pre), show a distinct difference between non-user and both user groups (up to frame 200), but the differences might not be significant. Harder to distinguish between the occasional and daily user trajectories.*
+
+```{r wi_sd_fxn}
+# Check to make sure there are significant numbers in each user category
+table(right_0.pt.w$user_cat)
+
+sd_fxn.pt <- as.data.frame(aggregate(right_0.pt.w[, 3:601], 
+                                    list(right_0.pt.w$user_cat),
+                                    FUN = function(x) sd(x, na.rm = T)))
+wiPctChg <- names(right_0.pt.w)[3:601]
+
+sd_fxn.pt.l <- reshape(sd_fxn.pt, 
+                      varying = wiPctChg, 
+                      v.names = "wi_percent_change", 
+                      timevar = "frame", 
+                      times = wiPctChg, 
+                      direction = "long")
+
+sd_fxn.pt.l$frame <- as.numeric(gsub("wiPctChg.", "", sd_fxn.pt.l$frame))
+rownames(sd_fxn.pt.l) <- NULL
+sd_fxn.pt.l$id <- NULL
+
+names(sd_fxn.pt.l)[names(sd_fxn.pt.l) == "Group.1"] <- "user_cat"
+sd_fxn.pt.l$wi_percent_change_neg <- -1*sd_fxn.pt.l$wi_percent_change
+
+ggplot(sd_fxn.pt.l, aes(x=frame, y = wi_percent_change, group = user_cat, color = user_cat))+
+  geom_line()+
+  geom_line(aes(x=frame, y = wi_percent_change_neg, group = user_cat, color = user_cat), 
+            linetype = "dashed")+
+  labs(title ="+/- 1 SD Within subject difference in percent change by THC use category")+
+  theme_bw()
+```
+
+## Missing Data for Within Subject Differences
+
+```{r missingness_wiSubj}
+## number of missing data points in each column
+missingnessCol <- apply(right_0.pt.w[, 3:601], 
+                        MARGIN = 2, 
+                        FUN = function(x) sum(is.na(x)))
+
+sum(missingnessCol == 0) ## 140 columns without any missing data
+sum(missingnessCol == 84) ## 109 columns with all missing data
+sum(missingnessCol <= 68) ## 438 columns where at least 80% of participants have data
+hist(missingnessCol, breaks = 30)
+
+missing.df <- data.frame(frame = seq(0, 598, by =1), 
+                            missingness = round(missingnessCol/nrow(right_0.pt.w)*100, 2), 
+                            stringsAsFactors = F)
+
+ggplot(missing.df, aes(x=frame, y= missingness))+
+  geom_line()
+```
+Truncate within person difference data to frame 400 where missingness reaches 50%. 
+
+Try to visualize missing data in within person data frame
+```{r visMissing}
+
+wi_pct_chg <- names(right_0.pt.w)[3:601]
+
+right_0.pt.l <- reshape(right_0.pt.w,
+                        varying = wi_pct_chg,
+                        v.names = "wi_pct_chg_diff", 
+                        timevar = 'frame', 
+                        times = wi_pct_chg,
+                        direction = "long")
+                        
+right_0.pt.l$frame <- as.numeric(gsub("wiPctChg.", "", right_0.pt.l$frame))
+rownames(right_0.pt.l) <- NULL
+right_0.pt.l$id <- NULL
+
+
+right_0.pt.l$notMissing <- ifelse(is.na(right_0.pt.l$wi_pct_chg_diff), 0, 1)
+
+ggplot(right_0.pt.l, aes(x = as.factor(frame), y = subject_id, fill = as.factor(notMissing)))+
+  geom_raster(alpha = 0.8)+
+  scale_fill_manual(values = c("black", 'white'), 
+                    labels = c("Missing", "Present"))+
+  theme(axis.text.x=element_text(angle = 45, vjust = 1, hjust = 1))
+```
+
+
+### fPCA Within Person Differences
+```{r fPCA_withinPersonChange}
+right_0_wi.fpca <- fpca.face(Y = as.matrix(right_0.pt.w[, 3:401]), pve = 0.95, knots = 30, var = T)
+# str(right_0.fpca)
+
+# plot_shiny(right_0.fpca)
+right_0_wi.fpca.pve <- round(right_0_wi.fpca$evalues/sum(right_0_wi.fpca$evalues)*100, 2)
+
+mu <- right_0_wi.fpca$mu
+right_sd <- sqrt(right_0_wi.fpca$evalues)
+right_Phi <- right_0_wi.fpca$efunctions 
+
+wi.df_plot <- data.frame(frame = seq(0, 398, by = 1), 
+                      mu = mu, 
+                      errband1 = 2*right_Phi[, 1]*right_sd[1], 
+                      errband2 = 2*right_Phi[, 2]*right_sd[2], 
+                      errband3 = 2*right_Phi[, 3]*right_sd[3], 
+                      errband4 = 2*right_Phi[, 4]*right_sd[4], 
+                      errband5 = 2*right_Phi[, 5]*right_sd[5], 
+                      errband6 = 2*right_Phi[, 6]*right_sd[6])
+
+colors <- c("Pop.Mean" = "black", "+2SD" = "red", "-2SD" = "blue")
+
+wi.plot_pc1 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+  geom_line(aes(color = "Pop.Mean"))+
+  geom_line(aes(x = frame, y = mu+errband1, color = "+2SD"))+
+  geom_line(aes(x = frame, y = mu-errband1, color = "-2SD"))+
+  labs(x = "frame", 
+       y = "Percent Change", 
+       color = "Legend", 
+       title = paste("PC1:", "% Var Explained:", right_0_wi.fpca.pve[1]))+
+  scale_color_manual(values = colors)+
+  theme_bw()
+
+wi.plot_pc2 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+  geom_line(aes(color = "Pop.Mean"))+
+  geom_line(aes(x = frame, y = mu+errband2, color = "+2SD"))+
+  geom_line(aes(x = frame, y = mu-errband2, color = "-2SD"))+
+  labs(x = "frame", 
+       y = "Percent Change", 
+       color = "Legend", 
+       title = paste("PC2:", "% Var Explained:", right_0_wi.fpca.pve[2]))+
+  scale_color_manual(values = colors)+
+  theme_bw()
+
+wi.plot_pc3 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+  geom_line(aes(color = "Pop.Mean"))+
+  geom_line(aes(x = frame, y = mu+errband3, color = "+2SD"))+
+  geom_line(aes(x = frame, y = mu-errband3, color = "-2SD"))+
+  labs(x = "frame", 
+       y = "Percent Change", 
+       color = "Legend", 
+       title = paste("PC3:", "% Var Explained:", right_0_wi.fpca.pve[3]))+
+  scale_color_manual(values = colors)+
+  theme_bw()
+
+wi.plot_pc4 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+  geom_line(aes(color = "Pop.Mean"))+
+  geom_line(aes(x = frame, y = mu+errband4, color = "+2SD"))+
+  geom_line(aes(x = frame, y = mu-errband4, color = "-2SD"))+
+  labs(x = "frame", 
+       y = "Percent Change", 
+       color = "Legend", 
+       title = paste("PC4:", "% Var Explained:", right_0_wi.fpca.pve[4]))+
+  scale_color_manual(values = colors)+
+  theme_bw()
+
+wi.plot_pc5 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+  geom_line(aes(color = "Pop.Mean"))+
+  geom_line(aes(x = frame, y = mu+errband5, color = "+2SD"))+
+  geom_line(aes(x = frame, y = mu-errband5, color = "-2SD"))+
+  labs(x = "frame", 
+       y = "Percent Change", 
+       color = "Legend", 
+       title = paste("PC5:", "% Var Explained:", right_0_wi.fpca.pve[5]))+
+  scale_color_manual(values = colors)+
+  theme_bw()
+
+wi.plot_pc6 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+  geom_line(aes(color = "Pop.Mean"))+
+  geom_line(aes(x = frame, y = mu+errband6, color = "+2SD"))+
+  geom_line(aes(x = frame, y = mu-errband6, color = "-2SD"))+
+  labs(x = "frame", 
+       y = "Percent Change", 
+       color = "Legend", 
+       title = paste("PC6:", "% Var Explained:", right_0_wi.fpca.pve[6]))+
+  scale_color_manual(values = colors)+
+  theme_bw()
+```
+
+```{r fpca_wi_pc1}
+wi.plot_pc1 
+```
+
+PC1: Individuals with high scores on PC1 have a weaker minimal constriction at post compared to pre. Individuals with low scores on PC1 have a stronger minimal constriction at post compared to pre.
+
+```{r explore_PC1}
+wi.scores <- as.data.frame(right_0_wi.fpca$scores)
+names(wi.scores) <- c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6")
+wi.scores$subject_id <- rownames(wi.scores)
+
+
+# pc_ind_plots <- function(scores.df, raw.df, pc_plot.df, q, pc= "PC1", id = "subject_id", pc.val = 1, pc_plot.var = "wiPctChg", raw.plot.var = "percent_change"){
+#   q.pc <- quantile(scores.df[, pc], probs = q)
+#   q.ids <- scores.df[scores.df[, pc] > q.pc, id]
+#   
+#   q.df <- pc_plot.df[pc_plot.df[, id] %in% q.ids, ]
+#   
+#   colors <- c("Pop.Mean" = "black", "+2SD" = "red", "-2SD" = "blue")
+#   
+#   print(ggplot(data = pc_plot.df, aes(x=frame, y = mu))+
+#         geom_line(aes(color = "Pop.Mean"))+
+#         geom_line(aes(x = frame, y = mu+ pc_plot.df[, 2+pc.val], color = "+2SD"))+
+#         geom_line(aes(x = frame, y = mu- pc_plot.df[, 2+pc.val], color = "-2SD"))+
+#         labs(x = "frame",
+#              y = "Percent Change",
+#              color = "Legend",
+#              title = paste0("Individuals in the ", q*100,"th Percentile of PC1 scores"))+
+#         geom_line(data = q.df, aes(x=frame, y = pc_plot.var, group = id))+
+#         #scale_color_manual(values = colors)+
+#         theme_bw())
+#   
+#   for(i in q.ids){
+#   print(ggplot(data = raw.df[raw.df[, id] == i, ], 
+#                aes(x = frame, y = raw.plot.var, group = tp, color = tp))+
+#   geom_line()+
+#   labs(title = paste0(i, " Pre/Post: ", q*100 , "th Percentile PC1 scores"))+
+#   theme_bw())
+#   }
+# }
+
+# pc_ind_plots(scores.df = wi.scores, 
+#              raw.df = right_0.df, 
+#              pc_plot.df = right_0.pt, 
+#              q = 0.95, pc = "PC1", id = "subject_id", pc.val = 1, pc_plot.var = "wiPctChg", raw.plot.var = "percent_change")
+
+q.95 <- quantile(wi.scores$PC1, probs = 0.95)
+
+pctile95.wi <- wi.scores$subject_id[wi.scores$PC1 > q.95] 
+
+pctile95.wi.df <- right_0.pt[right_0.pt$subject_id %in% pctile95.wi, ]
+
+ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+  geom_line(aes(color = "Pop.Mean"))+
+  geom_line(aes(x = frame, y = mu+errband1, color = "+2SD"))+
+  geom_line(aes(x = frame, y = mu-errband1, color = "-2SD"))+
+  labs(x = "frame", 
+       y = "Percent Change", 
+       color = "Legend", 
+       title = "Individuals in the Top 5th Percentile of PC1 scores")+
+  geom_line(data = pctile95.wi.df, aes(x=frame, y = wiPctChg, group = subject_id, color = subject_id))+
+  scale_color_manual(values = colors)+
+  theme_bw()
+
+for(i in pctile95.wi){
+  print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
+               aes(x = frame, y = percent_change, group = tp, color = tp))+
+  geom_line()+
+  labs(title = paste0(i, " Pre/Post: Top 5th Percentile PC1 scores"))+
+  theme_bw())
+}
+
+q.05 <- quantile(wi.scores$PC1, probs = 0.05)
+
+pctile05.wi <- wi.scores$subject_id[wi.scores$PC1 < q.05] 
+
+pctile05.wi.df <- right_0.pt[right_0.pt$subject_id %in% pctile05.wi, ]
+
+ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+  geom_line(aes(color = "Pop.Mean"))+
+  geom_line(aes(x = frame, y = mu+errband1, color = "+2SD"))+
+  geom_line(aes(x = frame, y = mu-errband1, color = "-2SD"))+
+  labs(x = "frame", 
+       y = "Percent Change", 
+       color = "Legend", 
+       title = "Individuals in the 5th Percentile of PC1 scores")+
+  geom_line(data = pctile05.wi.df, aes(x=frame, y = wiPctChg, group = subject_id, color = subject_id))+
+  scale_color_manual(values = colors)+
+  theme_bw()
+
+for(i in pctile05.wi){
+  print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
+               aes(x = frame, y = percent_change, group = tp, color = tp))+
+  geom_line()+
+  labs(title = paste0(i, " Pre/Post: 5th Percentile PC1 scores"))+
+  theme_bw())
+}
+
+```
+
+```{r fpca_wi_pc2}
+wi.plot_pc2
+```
+
+PC2: Individuals with high loading on PC2 have a weaker initial constriction at post and a stronger rebound dilation past the 200th frame. Individuals with a low loading on PC2 have a stronger initial constriction at paost and a weaker rebound dilation past the 200th frame.
+
+```{r explore_PC2}
+
+q.95 <- quantile(wi.scores$PC2, probs = 0.95)
+
+pctile95.wi <- wi.scores$subject_id[wi.scores$PC2 > q.95] 
+
+pctile95.wi.df <- right_0.pt[right_0.pt$subject_id %in% pctile95.wi, ]
+
+ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+  geom_line(aes(color = "Pop.Mean"))+
+  geom_line(aes(x = frame, y = mu+errband2, color = "+2SD"))+
+  geom_line(aes(x = frame, y = mu-errband2, color = "-2SD"))+
+  labs(x = "frame", 
+       y = "Percent Change", 
+       color = "Legend", 
+       title = "Individuals in the Top 5th Percentile of PC2 scores")+
+  geom_line(data = pctile95.wi.df, aes(x=frame, y = wiPctChg, group = subject_id, color = subject_id))+
+  scale_color_manual(values = colors)+
+  theme_bw()
+
+for(i in pctile95.wi){
+  print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
+               aes(x = frame, y = percent_change, group = tp, color = tp))+
+  geom_line()+
+  labs(title = paste0(i, " Pre/Post: Top 5th Percentile PC2 scores"))+
+  theme_bw())
+}
+
+q.05 <- quantile(wi.scores$PC2, probs = 0.05)
+
+pctile05.wi <- wi.scores$subject_id[wi.scores$PC2 < q.05] 
+
+pctile05.wi.df <- right_0.pt[right_0.pt$subject_id %in% pctile05.wi, ]
+
+ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+  geom_line(aes(color = "Pop.Mean"))+
+  geom_line(aes(x = frame, y = mu+errband2, color = "+2SD"))+
+  geom_line(aes(x = frame, y = mu-errband2, color = "-2SD"))+
+  labs(x = "frame", 
+       y = "Percent Change", 
+       color = "Legend", 
+       title = "Individuals in the 5th Percentile of PC2 scores")+
+  geom_line(data = pctile05.wi.df, aes(x=frame, y = wiPctChg, group = subject_id, color = subject_id))+
+  scale_color_manual(values = colors)+
+  theme_bw()
+
+for(i in pctile05.wi){
+  print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
+               aes(x = frame, y = percent_change, group = tp, color = tp))+
+  geom_line()+
+  labs(title = paste0(i, " Pre/Post: 5th Percentile PC2 scores"))+
+  theme_bw())
+}
+
+```
+
+```{r fpca_wi_pc3}
+wi.plot_pc3
+
+q.95 <- quantile(wi.scores$PC3, probs = 0.95)
+
+pctile95.wi <- wi.scores$subject_id[wi.scores$PC3 > q.95] 
+
+pctile95.wi.df <- right_0.pt[right_0.pt$subject_id %in% pctile95.wi, ]
+
+ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+  geom_line(aes(color = "Pop.Mean"))+
+  geom_line(aes(x = frame, y = mu+errband3, color = "+2SD"))+
+  geom_line(aes(x = frame, y = mu-errband3, color = "-2SD"))+
+  labs(x = "frame", 
+       y = "Percent Change", 
+       color = "Legend", 
+       title = "Individuals in the Top 5th Percentile of PC3 scores")+
+  geom_line(data = pctile95.wi.df, aes(x=frame, y = wiPctChg, group = subject_id, color = subject_id))+
+  scale_color_manual(values = colors)+
+  theme_bw()
+
+for(i in pctile95.wi){
+  print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
+               aes(x = frame, y = percent_change, group = tp, color = tp))+
+  geom_line()+
+  labs(title = paste0(i, " Pre/Post: Top 5th Percentile PC3 scores"))+
+  theme_bw())
+}
+
+q.05 <- quantile(wi.scores$PC3, probs = 0.05)
+
+pctile05.wi <- wi.scores$subject_id[wi.scores$PC3 < q.05] 
+
+pctile05.wi.df <- right_0.pt[right_0.pt$subject_id %in% pctile05.wi, ]
+
+ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+  geom_line(aes(color = "Pop.Mean"))+
+  geom_line(aes(x = frame, y = mu+errband3, color = "+2SD"))+
+  geom_line(aes(x = frame, y = mu-errband3, color = "-2SD"))+
+  labs(x = "frame", 
+       y = "Percent Change", 
+       color = "Legend", 
+       title = "Individuals in the 5th Percentile of PC3 scores")+
+  geom_line(data = pctile05.wi.df, aes(x=frame, y = wiPctChg, group = subject_id, color = subject_id))+
+  scale_color_manual(values = colors)+
+  theme_bw()
+
+for(i in pctile05.wi){
+  print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
+               aes(x = frame, y = percent_change, group = tp, color = tp))+
+  geom_line()+
+  labs(title = paste0(i, " Pre/Post: 5th Percentile PC3 scores"))+
+  theme_bw())
+}
+```
+
+```{r fpca_wi_pc4}
+wi.plot_pc4
+```
+
+```{r fpca_wi_pc5}
+wi.plot_pc5
+```
+
+
+```{r fpca_wi_pc6}
+wi.plot_pc6
+```
+### Within person difference PC explanations
+
+
+
+# Meeting 20220908
+
+```{r bumpy_curves}
+### INVESTIGATE BUMPS IN MEAN Function
+
+## Pre/Post Across subjects
+ggplot(mean_fxn.l, aes(x=frame, y = percent_change, group = grp,  
+                       color = user_cat))+
+  geom_line()+
+  xlim(50, 200)+
+  facet_grid(rows = vars(tp))+
+  labs(title = "Average Percent Change by Pre/Post and THC use category")+
+  theme_bw()
+
+right_0.w[right_0.w$user_cat == "non-user" & right_0.w$tp == "pre2", 103:105]
+right_0.w[right_0.w$user_cat == "non-user" & right_0.w$tp == "post", 101:103]
+
+
+## Within person plots
+ggplot(mean_fxn.pt.l, aes(x=frame, y = wi_percent_change, group = user_cat, color = user_cat))+
+  geom_line()+
+  xlim(50, 200)+
+  labs(title ="Average Within subject difference in percent change by THC use category")+
+  theme_bw()
+
+## Mean function Spike in Occassional user group
+mean_fxn.pt[mean_fxn.pt$Group.1 == "occasional", 113:119]
+right_0.pt.w[right_0.pt.w$user_cat == "occasional", 116:119]
+
+## Mean function Spike in Daily user group
+mean_fxn.pt[mean_fxn.pt$Group.1 == "daily", 133:149]
+right_0.pt.w[right_0.pt.w$user_cat == "daily", 143:146]
+```
+
+Jagged changes in the mean function lines seems to stem from missing data at those frames in the data set. The subjects per user-group is between 25 - 30, so missing data for one individual has a noticeable effect on mean function line. 
+
+
+# Analysis
+
+## POST DATA: Logistic Regression models to predict Smoker vs non-smoker using post data. plot AUC
+
+```{r auc_post}
+post_right_0.fpca <- fpca.face(Y = as.matrix(right_0.post.w[, 4:602]), pve = 0.95, knots = 30, var = T)
+
+post_right_0.fpca.pve <- round(post_right_0.fpca$evalues/sum(post_right_0.fpca$evalues)*100, 2)
+
+post_right_scores <- as.data.frame(post_right_0.fpca$scores)
+names(post_right_scores) <- c("PC1", "PC2", "PC3", "PC4")
+post_right_scores$subject_id <- rownames(post_right_scores)
+
+pt.scores <- merge(post_right_scores, pt.df, 
+                   by = c("subject_id"), 
+                   all.x = T)
+
+pt.scores$smoker <- ifelse(pt.scores$user_cat %in% c("daily", "occasional"),1, 0)
+
+m1 <- glm(smoker ~ PC1 + PC2 + PC3 +PC4, family = "binomial", data = pt.scores)
+summary(m1)
+
+pt.scores$pred <- predict(m1, pt.scores)
+
+pt.scores.roc <- roc(response = pt.scores$smoker, predictor = pt.scores$pred)
+
+pt.scores.roc
+
+plot.roc(pt.scores.roc)
+```
+
+## Within-Person Difference: Logistic Regression models to predict Smoker vs non-smoker using Within Person Difference data. plot AUC
+
+```{r auc_wi}
+pt.wi.scores <- merge(wi.scores, pt.df, 
+                      by = "subject_id", 
+                      all.x = T)
+
+pt.wi.scores$smoker <- ifelse(pt.wi.scores$user_cat %in% c("daily", "occasional"),1, 0)
+
+m2 <- glm(smoker ~ PC1 + PC2 + PC3 + PC4+ PC5+ PC6, family = "binomial", data = pt.wi.scores)
+summary(m2)
+
+pt.wi.scores$pred <- predict(m2, pt.wi.scores)
+
+pt.wi.scores.roc <- roc(response = pt.wi.scores$smoker, predictor = pt.wi.scores$pred)
+
+pt.wi.scores.roc
+
+plot.roc(pt.wi.scores.roc)
+```
+
+## Run logistic regression with same sample and same # of PCs. 
+
+### Post sample
+```{r logr_sameSample}
+summary(m1)
+pt.scores.roc
+
+plot.roc(pt.scores.roc)
+```
+
+
+### Within sample
+```{r wi.logr_sameSample}
+m5 <- glm(smoker ~ PC1 + PC2 + PC3 +PC4, family = "binomial", data = pt.wi.scores)
+summary(m5)
+
+pt.wi.scores$pred_sameNPC <- predict(m5, pt.wi.scores)
+
+pt.wi.scores.roc2 <- roc(response = pt.wi.scores$smoker, 
+                     predictor = pt.wi.scores$pred_sameNPC)
+
+pt.wi.scores.roc2
+
+plot.roc(pt.wi.scores.roc2)
+```
+
+## Association with Demog Variables
+
+```{r demogAssoc_prep}
+pt.scores$male <- ifelse(pt.scores$demo_gender == "Male", 1, 0)
+pt.scores$non_user <- ifelse(pt.scores$user_cat == "non-user", 1, 0)
+pt.scores$daily <- ifelse(pt.scores$user_cat == "daily", 1, 0)
+pt.scores$occasional <- ifelse(pt.scores$user_cat == "occasional", 1, 0)
+
+
+pt.wi.scores$male <- ifelse(pt.wi.scores$demo_gender == "Male", 1, 0)
+pt.wi.scores$non_user <- ifelse(pt.wi.scores$user_cat == "non-user", 1, 0)
+pt.wi.scores$daily <- ifelse(pt.wi.scores$user_cat == "daily", 1, 0)
+pt.wi.scores$occasional <- ifelse(pt.wi.scores$user_cat == "occasional", 1, 0)
+
+```
+
+### Post Data
+```{r demogAssoc_post}
+chart.Correlation(pt.scores[, c("PC1", "PC2", "PC3", "PC4", 
+                                "demo_age","male", "thc.post", "thc_chg", "BMI", 
+                                "postConsumpTimeToTest", "smoker", 
+                                "non_user", "daily", "occasional")])
+
+post.age.m <- lm(demo_age ~ PC1 + PC2 + PC3 + PC4, data = pt.scores)
+summary(post.age.m)
+
+post.wt.m <- lm(demo_weight ~ PC1 + PC2 + PC3 + PC4, data = pt.scores)
+summary(post.wt.m)
+
+post.ht.m <- lm(demo_height ~ PC1 + PC2 + PC3 + PC4, data = pt.scores)
+summary(post.ht.m)
+
+post.bmi.m <- lm(BMI ~ PC1 + PC2 + PC3 + PC4, data = pt.scores)
+summary(post.bmi.m)
+
+post.thc.m <- lm(thc_chg ~ PC1 + PC2 + PC3 + PC4, data = pt.scores)
+summary(post.thc.m)
+
+post.consump.m <- lm(postConsumpTimeToTest ~ PC1 + PC2 + PC3 + PC4, data = pt.scores)
+summary(post.consump.m)
+
+post.male.m <- glm(male ~ PC1 + PC2 + PC3 + PC4, family = "binomial", data = pt.scores)
+summary(post.male.m)
+```
+
+### Within Person Difference Data
+```{r demogAssoc_wi}
+chart.Correlation(pt.wi.scores[, c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6", 
+                                "demo_age","male", "thc.post", "thc_chg", "BMI", 
+                                "postConsumpTimeToTest", "smoker", 
+                                "non_user", "daily", "occasional")])
+
+wi.age.m <- lm(demo_age ~ PC1 + PC2 + PC3 + PC4, data = pt.wi.scores)
+summary(wi.age.m)
+
+wi.wt.m <- lm(demo_weight ~ PC1 + PC2 + PC3 + PC4, data = pt.wi.scores)
+summary(wi.wt.m)
+
+wi.ht.m <- lm(demo_height ~ PC1 + PC2 + PC3 + PC4, data = pt.wi.scores)
+summary(wi.ht.m)
+
+wi.bmi.m <- lm(BMI ~ PC1 + PC2 + PC3 + PC4, data = pt.wi.scores)
+summary(wi.bmi.m)
+
+wi.thc.m <- lm(thc_chg ~ PC1 + PC2 + PC3 + PC4, data = pt.wi.scores)
+summary(wi.thc.m)
+
+wi.consump.m <- lm(postConsumpTimeToTest ~ PC1 + PC2 + PC3 + PC4, data = pt.wi.scores)
+summary(wi.consump.m)
+
+wi.male.m <- glm(male ~ PC1 + PC2 + PC3 + PC4, family = "binomial", data = pt.wi.scores)
+summary(wi.male.m)
+```
+
+## Backward stepwise selection
+### POST data
+```{r step_post}
+post_step.df <- pt.scores[, c("PC1", "PC2", "PC3", "PC4", "smoker")]
+
+m.post_step <- glm(smoker ~ PC1 + PC2 + PC3 + PC4, family = "binomial", data = post_step.df)
+post_step.res <- step(m.post_step, direction = "backward")
+
+pt.scores$pred_post_step <- predict(post_step.res, pt.scores)
+
+pt.scores.roc3 <- roc(response = pt.wi.scores$smoker, 
+                     predictor = pt.scores$pred_post_step)
+
+pt.scores.roc3
+
+plot.roc(pt.scores.roc3)
+```
+
+### Within Subject Difference
+```{r wi_step}
+wi_step.df <- pt.wi.scores[, c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6", "smoker")]
+
+m.wi_step <- glm(smoker ~ PC1 + PC2 + PC3 + PC4 +PC5 +PC6, family = "binomial", data = wi_step.df)
+wi_step.res <- step(m.wi_step, direction = "backward")
+summary(wi_step.res)
+
+pt.wi.scores$pred_wi_step <- predict(wi_step.res, pt.wi.scores)
+
+pt.wi.scores.roc4 <- roc(response = pt.wi.scores$smoker, 
+                     predictor = pt.wi.scores$pred_wi_step)
+
+pt.wi.scores.roc4
+
+plot.roc(pt.wi.scores.roc4)
+```
+
+## Function on Scalar Regression
+### Post
+```{r post_gam}
+pt.analytic.df <- pt.df[pt.df$subject_id %in% analytic.N, ]
+pt.analytic.df$occasional <- ifelse(pt.analytic.df$user_cat == "occasional", 1, 0)
+pt.analytic.df$daily  <- ifelse(pt.analytic.df$user_cat == "daily", 1, 0)
+
+
+pt.analytic.df <- pt.analytic.df[order(pt.analytic.df$subject_id), ]
+
+right_0.post.w <- right_0.post.w[order(right_0.post.w$subject_id), ]
+
+post_gam.df <- data.frame("subject_id" = pt.analytic.df$subject_id,
+                          "occ_user" = pt.analytic.df$occasional, 
+                          "daily_user" = pt.analytic.df$daily, 
+                          "pct_chg" = I(as.matrix(right_0.post.w[, c(4:602)])))
+
+m.post_gam <- pffr(pct_chg ~ occ_user + daily_user, data = post_gam.df)
+
+summary(m.post_gam)
+
+```
+
+### Within Subject
+```{r wi_fosr}
+right_0.pt.w <- right_0.pt.w[order(right_0.pt.w$subject_id), ]
+
+wi_gam.df <- data.frame("subject_id" = pt.analytic.df$subject_id,
+                          "occ_user" = pt.analytic.df$occasional, 
+                          "daily_user" = pt.analytic.df$daily, 
+                          "wi_pct_chg" = I(as.matrix(right_0.pt.w[, c(3:601)])))
+
+m.wi_gam <- pffr(wi_pct_chg ~ occ_user + daily_user, data = wi_gam.df)
+
+summary(m.wi_gam)
+```
