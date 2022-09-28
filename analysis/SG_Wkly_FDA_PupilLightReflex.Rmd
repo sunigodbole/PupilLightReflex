@@ -13,6 +13,14 @@ output:
 ---
 
 # To Do: 
+1. Truncate data to non-missing samples around frame 400
+2. Compare scalar vs functional AUC curves (need scalar features from Ben)
+3. Fit foSR with gam/bam
+4. Write down mathematical equations for foSR 
+5. Write down mathematical interpretation of the plots. 
+
+
+# Task Worked On From Last Week:
 1. Create analytic data set with the same individuals in post and within person difference data sets
 2. AUC with top PCs
   + Use backward selection to select the best set of PC for prediction
@@ -22,35 +30,22 @@ output:
   + Post data PC3 associated with Smoking status
   + Within Diff data PC3 associated with Smoking status
 5. Look into models with different N -- missing data?
-6. Write down mathematical interpretation of the plots. 
-7. Function on Scalar Regression (use class notes)
+6. Function on Scalar Regression (use class notes)
   + Model: $Y_{ij}(t) = f_0(t) + f_1(t)I(user = Occassional) +f_2(t)I(user == Daily) + b_{ij}(t) + e_{ij}(t)$
     + $b_{ij}(t)$ is a random effect (RE) for subject, start modeling with independence assumption between pt-time points and then incorporate RE later
-8. Compare scalar vs functional AUC curves (need scalar features from Ben)
-
-# Task Worked On From Last Week:
-1. Remove subjects with known mis-alignment
-2. Build logistic regression models with PC scores to predict smoker vs non-smoker. Plot AUC
-  + No train/test samples
-  + Run PCA on post data only and fit logistic regression models + AUC (top 4 PCs)
-  + Fit logistic regression models + AUC on within person difference data (top 4 PCs)
-3. FOCUS on fPCA: Exploratory analyses
-  a. Are PC scores associated with demog variables, time from smoking to test or THC user category?
-4. Revise interpretation of +/- 2 SD functions for PC1 & PC2 for within subject difference of percent change.
-  + Plot out pre, post and difference for subjects with high/low scores on each PC to get a better interpretation of the PC
-
 ## Comments for Ben
 + Correcting export error leading to NA in frame numbers
 + Potentially misaligned data
-  + 001-109-pre2
-  + 001-060-post 
+  + 001-109-pre2: Reviewed and corrected in pupil_data_with_demo_20220926.csv file
+  + 001-060-post: Prolonged period of closing eyes before and during test -- disregard this ptid-time (BS) 
   + 001-007-pre2: start at 2nd bump? *-- reviewed by Ben*
   + 001-033-pre2: odd pattern *-- reviewed by Ben*
   + 001-038-pre2: odd pattern *-- reviewed by Ben*
-  + 001-043-pre2/post: both look odd; mainly check pre2; maybe review videos
+  + 001-043-pre2: both look odd; mainly check pre2; maybe review videos -- graph okay to use; cut off at frame 400 (BS)
+  + 001-043-post: both look odd; mainly check pre2; maybe review videos --  difficult to define true beginning -- okay to use (BS)
 + Frames removed (outliers)
   + Should be a way to have a value for every frame?
-+ Ask for scalar features 
++ Ask for scalar features -- SENT & REC'D
   
 ## Notes 
 1. Send HTML of Rmarkdown to JW & AL by Tuesday night
@@ -125,7 +120,7 @@ ps_folder <- "202208_PupilLightReflex"
 
 # Data Preparation
 ```{r dataReadIn}
-ps <- read.csv(file.path(data_folder, ps_folder, "pupil_data_with_demo.csv"))
+ps <- read.csv(file.path(data_folder, ps_folder, "pupil_data_with_demo_20220926.csv"))
 
 ps$demo_gender <- factor(ps$demo_gender, 
                          levels = c(1,2), 
@@ -151,22 +146,22 @@ ps$tp <- factor(ps$tp,
                 labels = c("pre2", "post"))
 
 # str(ps)
-
-#impute frame number 
-for(i in 2:(nrow(ps)-1)){
-  if(is.na(ps$frame[i]) & is.na(ps$frame[i+1] - ps$frame[i-1])){
-    ps$frame[i] <- ps$frame[i-1]+1
-  }else(if(is.na(ps$frame[i]) & (ps$frame[i+1] - ps$frame[i-1]) == 2){
-    ps$frame[i] <- ps$frame[i-1]+1
-  }else(if(is.na(ps$frame[i]) & (ps$frame[i+1] - ps$frame[i-1]) > 2){
-    if(abs(ps$percent_change[i] - ps$percent_change[i-1]) <
-       abs(ps$percent_change[i+1] - ps$percent_change[i])){
-      ps$frame[i] <- ps$frame[i-1]+1
-    }else(ps$frame[i] <- ps$frame[i+1]-1)
-    }
-    )
-  )
-}
+## -- Not needed with Ben's revised file missing frame numbers recorded
+# #impute frame number 
+# for(i in 2:(nrow(ps)-1)){
+#   if(is.na(ps$frame[i]) & is.na(ps$frame[i+1] - ps$frame[i-1])){
+#     ps$frame[i] <- ps$frame[i-1]+1
+#   }else(if(is.na(ps$frame[i]) & (ps$frame[i+1] - ps$frame[i-1]) == 2){
+#     ps$frame[i] <- ps$frame[i-1]+1
+#   }else(if(is.na(ps$frame[i]) & (ps$frame[i+1] - ps$frame[i-1]) > 2){
+#     if(abs(ps$percent_change[i] - ps$percent_change[i-1]) <
+#        abs(ps$percent_change[i+1] - ps$percent_change[i])){
+#       ps$frame[i] <- ps$frame[i-1]+1
+#     }else(ps$frame[i] <- ps$frame[i+1]-1)
+#     }
+#     )
+#   )
+# }
 ```
 
 ```{r pt_summ}
@@ -185,18 +180,40 @@ pt.df <- unique(ps[, c("subject_id", "tp", "user_cat", "demo_age",
 table(pt.df$tp)
 ```
 
-There are more subjects in total than the by time point. Indicating incomplete data with some subjects missing "pre" and others missing "post" measurement. 
+There are more subjects in total than the by time point. Indicating incomplete data with some subjects missing "pre" and others missing "post" measurement.
 
-Reshape participant demog data to perserve pre and post thc levels
+Add scalar features for each participant-time point
+```{r scalarFeat}
+scalar.feat <- read.csv(file.path(data_folder, ps_folder, "scalars_trim.csv"), 
+                        header = T, stringsAsFactors = F)
+
+scalar.feat$subject_id <- substr(scalar.feat$timeid, 1, 7)
+scalar.feat$tp <- substr(scalar.feat$timeid, 8, 11)
+
+scalar.featR <- scalar.feat[scalar.feat$eye == "Right", ]
+
+pt.df <- merge(pt.df, scalar.featR[, c("subject_id", "tp", "min_constriction", 
+                                       "duration", "avg_end_percent", "slope", 
+                                       "AUC", "eye")], 
+               by = c("subject_id", "tp"))
+
+```
+
+Reshape participant demog data to preserve pre and post THC levels and scalar features
 ```{r ptdf_reshape}
 pt.df.w <- reshape(pt.df, 
                    timevar = "tp", 
                    idvar = c("subject_id", "user_cat", "demo_age", 
-                             "demo_weight", "demo_height", "demo_gender"), 
+                             "demo_weight", "demo_height", "demo_gender", "eye"), 
                    direction = "wide")
 pt.df.w$thc.post[pt.df.w$user_cat == "non-user" & is.na(pt.df.w$thc.post)] <- 0
 pt.df.w$thc_chg <- pt.df.w$thc.post - pt.df.w$thc.pre2
 pt.df.w$BMI <- pt.df.w$demo_weight*703/(pt.df.w$demo_height)^2
+pt.df.w$min_constriction_chg <- pt.df.w$min_constriction.post - pt.df.w$min_constriction.pre2
+pt.df.w$AUC_chg <- pt.df.w$AUC.post - pt.df.w$AUC.pre2
+pt.df.w$duration_chg <- pt.df.w$duration.post - pt.df.w$duration.pre2
+pt.df.w$avg_end_percent_chg <- pt.df.w$avg_end_percent.post - pt.df.w$avg_end_percent.pre2
+pt.df.w$slope_chg <-  pt.df.w$slope.post - pt.df.w$slope.pre2
 ```
 
 ## Add time from smoking to post test
@@ -234,7 +251,7 @@ non_user.id <- pt.df$subject_id[pt.df$user_cat == "non-user"]
 No Consumption end time recorded for non-users
 ```{r tab1}
 # Demographics Table by User Category
-table1(~ demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest|user_cat, 
+table1(~ demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg|user_cat, 
        data = pt.df)
 ```
 
@@ -347,7 +364,7 @@ Remove Outliers
 ```{r outliers}
 ## Remove known outliers
 ps$outliers <- 0
-ps$outliers[ps$subject_id == "001-109" & ps$tp == "pre2"] <- 1
+# ps$outliers[ps$subject_id == "001-109" & ps$tp == "pre2"] <- 1
 ps$outliers[ps$subject_id == "001-060" & ps$tp == "post"] <- 1
 
 ps <- ps[ps$outliers == 0, ]
@@ -469,22 +486,27 @@ sd_fxn <- as.data.frame(aggregate(right_0.w[, 4:602],
 NA's are when there's no data in for that time point and user category. Min frame value for NA is 480. 
 
 ### fPCA all subjects and timepoints
+
+Truncating to frame 400
 ```{r fPCA_all}
-right_0.fpca <- fpca.face(Y = as.matrix(right_0.w[, 4:602]), pve = 0.95, knots = 30, var = T)
+right_0.fpca <- fpca.face(Y = as.matrix(right_0.w[, 4:404]), pve = 0.95, knots = 30, var = T)
 # str(right_0.fpca)
 
 # plot_shiny(right_0.fpca)
 right_0.fpca.pve <- round(right_0.fpca$evalues/sum(right_0.fpca$evalues)*100, 2)
+right_0.fpca.pve
+
 mu <- right_0.fpca$mu
 right_sd <- sqrt(right_0.fpca$evalues)
 right_Phi <- right_0.fpca$efunctions
 
-df_plot <- data.frame(frame = seq(0, 598, by = 1), 
+df_plot <- data.frame(frame = seq(0, 400, by = 1), 
                       mu = mu, 
                       errband1 = 2*right_Phi[, 1]*right_sd[1], 
                       errband2 = 2*right_Phi[, 2]*right_sd[2], 
                       errband3 = 2*right_Phi[, 3]*right_sd[3], 
-                      errband4 = 2*right_Phi[, 4]*right_sd[4])
+                      errband4 = 2*right_Phi[, 4]*right_sd[4], 
+                      errband5 = 2*right_Phi[, 5]*right_sd[5])
 
 colors <- c("Pop.Mean" = "black", "+2SD" = "red", "-2SD" = "blue")
 
@@ -529,6 +551,17 @@ plot_pc4 <- ggplot(data = df_plot, aes(x = frame, y = mu))+
        y = "Percent Change", 
        color = "Legend", 
        title = paste("PC4:", "% Var Explained:", right_0.fpca.pve[4]))+
+  scale_color_manual(values = colors)+
+  theme_bw()
+
+plot_pc5 <- ggplot(data = df_plot, aes(x = frame, y = mu))+
+  geom_line(aes(color = "Pop.Mean"))+
+  geom_line(aes(x = frame, y = mu+errband5, color = "+2SD"))+
+  geom_line(aes(x = frame, y = mu-errband5, color = "-2SD"))+
+  labs(x = "frame", 
+       y = "Percent Change", 
+       color = "Legend", 
+       title = paste("PC5:", "% Var Explained:", right_0.fpca.pve[5]))+
   scale_color_manual(values = colors)+
   theme_bw()
 ```
@@ -593,10 +626,15 @@ plot_pc3
 plot_pc4
 ```
 
-## Create Analytic Sample
+```{r plot_overallPC5}
+plot_pc5
+```
 
+## Create Analytic Sample
+Make sure datasets have the same particpants and are truncated at frame 400
 ```{r analyticN}
 right_0.post <- right_0.df[right_0.df$tp == "post", ]
+right_0.post <- right_0.post[right_0.post$frame <= 400, ]
 post.ids <- unique(right_0.post$subject_id)
 
 right_0.post.w <- reshape(right_0.post, 
@@ -605,7 +643,7 @@ right_0.post.w <- reshape(right_0.post,
                           direction = "wide")
 post.vars <- names(right_0.post.w)[4:ncol(right_0.post.w)]
 
-right_0.pt <- reshape(right_0.df, 
+right_0.pt <- reshape(right_0.df[right_0.df$frame <= 400,], 
                       timevar = "tp", 
                       idvar = c("subject_id", "user_cat", "frame"), 
                       direction = "wide")
@@ -620,8 +658,8 @@ right_0.pt.w <- reshape(right_0.pt,
                      direction = "wide")
 
 # remove rows where all data is missing (e.g. pt didn't have both pre and post)
-allMissing <- rowSums(is.na(right_0.pt.w[, 3:601]))
-rowsAllMissing <- names(allMissing)[allMissing == 599]
+allMissing <- rowSums(is.na(right_0.pt.w[, 3:403]))
+rowsAllMissing <- names(allMissing)[allMissing == 401]
 
 right_0.pt.w <- right_0.pt.w[!(rownames(right_0.pt.w) %in% rowsAllMissing), ]
 
@@ -643,7 +681,7 @@ row.names(right_0.pt.w) <- right_0.pt.w$subject_id
 No Consumption end time recorded for non-users
 ```{r tab1_analyticN}
 # Demographics Table by User Category
-table1(~ demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest|user_cat, 
+table1(~demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg|user_cat, 
        data = pt.df[pt.df$subject_id %in% analytic.N, ])
 ```
 
@@ -672,10 +710,10 @@ ggplot(right_0.pt, aes(x=frame, y = wiPctChg, group = subject_id, color = subjec
 
 ## Plot the mean and +/- 1 SD functions for within subject different in percent change
 ```{r wi_mean_fxn}
-mean_fxn.pt <- as.data.frame(aggregate(right_0.pt.w[, 3:601], 
+mean_fxn.pt <- as.data.frame(aggregate(right_0.pt.w[, 3:403], 
                                     list(right_0.pt.w$user_cat),
                                     FUN = function(x) mean(x, na.rm = T)))
-wiPctChg <- names(right_0.pt.w)[3:601]
+wiPctChg <- names(right_0.pt.w)[3:403]
 
 mean_fxn.pt.l <- reshape(mean_fxn.pt, 
                       varying = wiPctChg, 
@@ -702,10 +740,10 @@ ggplot(mean_fxn.pt.l, aes(x=frame, y = wi_percent_change, group = user_cat, colo
 # Check to make sure there are significant numbers in each user category
 table(right_0.pt.w$user_cat)
 
-sd_fxn.pt <- as.data.frame(aggregate(right_0.pt.w[, 3:601], 
+sd_fxn.pt <- as.data.frame(aggregate(right_0.pt.w[, 3:403], 
                                     list(right_0.pt.w$user_cat),
                                     FUN = function(x) sd(x, na.rm = T)))
-wiPctChg <- names(right_0.pt.w)[3:601]
+wiPctChg <- names(right_0.pt.w)[3:403]
 
 sd_fxn.pt.l <- reshape(sd_fxn.pt, 
                       varying = wiPctChg, 
@@ -733,7 +771,7 @@ ggplot(sd_fxn.pt.l, aes(x=frame, y = wi_percent_change, group = user_cat, color 
 
 ```{r missingness_wiSubj}
 ## number of missing data points in each column
-missingnessCol <- apply(right_0.pt.w[, 3:601], 
+missingnessCol <- apply(right_0.pt.w[, 3:403], 
                         MARGIN = 2, 
                         FUN = function(x) sum(is.na(x)))
 
@@ -742,7 +780,7 @@ sum(missingnessCol == 84) ## 109 columns with all missing data
 sum(missingnessCol <= 68) ## 438 columns where at least 80% of participants have data
 hist(missingnessCol, breaks = 30)
 
-missing.df <- data.frame(frame = seq(0, 598, by =1), 
+missing.df <- data.frame(frame = seq(0, 400, by =1), 
                             missingness = round(missingnessCol/nrow(right_0.pt.w)*100, 2), 
                             stringsAsFactors = F)
 
@@ -754,7 +792,7 @@ Truncate within person difference data to frame 400 where missingness reaches 50
 Try to visualize missing data in within person data frame
 ```{r visMissing}
 
-wi_pct_chg <- names(right_0.pt.w)[3:601]
+wi_pct_chg <- names(right_0.pt.w)[3:403]
 
 right_0.pt.l <- reshape(right_0.pt.w,
                         varying = wi_pct_chg,
@@ -780,7 +818,7 @@ ggplot(right_0.pt.l, aes(x = as.factor(frame), y = subject_id, fill = as.factor(
 
 ### fPCA Within Person Differences
 ```{r fPCA_withinPersonChange}
-right_0_wi.fpca <- fpca.face(Y = as.matrix(right_0.pt.w[, 3:401]), pve = 0.95, knots = 30, var = T)
+right_0_wi.fpca <- fpca.face(Y = as.matrix(right_0.pt.w[, 3:403]), pve = 0.95, knots = 30, var = T)
 # str(right_0.fpca)
 
 # plot_shiny(right_0.fpca)
@@ -790,7 +828,7 @@ mu <- right_0_wi.fpca$mu
 right_sd <- sqrt(right_0_wi.fpca$evalues)
 right_Phi <- right_0_wi.fpca$efunctions 
 
-wi.df_plot <- data.frame(frame = seq(0, 398, by = 1), 
+wi.df_plot <- data.frame(frame = seq(0, 400, by = 1), 
                       mu = mu, 
                       errband1 = 2*right_Phi[, 1]*right_sd[1], 
                       errband2 = 2*right_Phi[, 2]*right_sd[2], 
@@ -1144,9 +1182,10 @@ Jagged changes in the mean function lines seems to stem from missing data at tho
 ## POST DATA: Logistic Regression models to predict Smoker vs non-smoker using post data. plot AUC
 
 ```{r auc_post}
-post_right_0.fpca <- fpca.face(Y = as.matrix(right_0.post.w[, 4:602]), pve = 0.95, knots = 30, var = T)
+post_right_0.fpca <- fpca.face(Y = as.matrix(right_0.post.w[, 4:404]), pve = 0.95, knots = 30, var = T)
 
 post_right_0.fpca.pve <- round(post_right_0.fpca$evalues/sum(post_right_0.fpca$evalues)*100, 2)
+post_right_0.fpca.pve
 
 post_right_scores <- as.data.frame(post_right_0.fpca$scores)
 names(post_right_scores) <- c("PC1", "PC2", "PC3", "PC4")
@@ -1160,14 +1199,23 @@ pt.scores$smoker <- ifelse(pt.scores$user_cat %in% c("daily", "occasional"),1, 0
 
 m1 <- glm(smoker ~ PC1 + PC2 + PC3 +PC4, family = "binomial", data = pt.scores)
 summary(m1)
-
 pt.scores$pred <- predict(m1, pt.scores)
-
 pt.scores.roc <- roc(response = pt.scores$smoker, predictor = pt.scores$pred)
-
 pt.scores.roc
+post.auc.pc4 <- pt.scores.roc$auc
+plot.roc(pt.scores.roc, main = "Prediction of Smoker by PCs -- Post data")
 
-plot.roc(pt.scores.roc)
+m1.scalar <- glm(smoker ~ min_constriction.post + AUC.post + slope.post, family = "binomial", data = pt.scores)
+summary(m1.scalar)
+pt.scores$pred <- predict(m1.scalar, pt.scores)
+pt.scores.roc <- roc(response = pt.scores$smoker, predictor = pt.scores$pred)
+pt.scores.roc
+post.auc.scalar <- pt.scores.roc$auc
+plot.roc(pt.scores.roc, main = "Prediction of Smoker by Scalar Features -- Post data")
+
+auc.df <- data.frame("Label" = c("Post AUC PCs", "Post AUC Scalar Feat"), 
+                     "AUC" = c(post.auc.pc4, post.auc.scalar), 
+                     stringsAsFactors = F)
 ```
 
 ## Within-Person Difference: Logistic Regression models to predict Smoker vs non-smoker using Within Person Difference data. plot AUC
@@ -1188,7 +1236,7 @@ pt.wi.scores.roc <- roc(response = pt.wi.scores$smoker, predictor = pt.wi.scores
 
 pt.wi.scores.roc
 
-plot.roc(pt.wi.scores.roc)
+plot.roc(pt.wi.scores.roc, main = "Prediction of Smoker with PCs1-6: W/I Diff")
 ```
 
 ## Run logistic regression with same sample and same # of PCs. 
@@ -1208,13 +1256,32 @@ m5 <- glm(smoker ~ PC1 + PC2 + PC3 +PC4, family = "binomial", data = pt.wi.score
 summary(m5)
 
 pt.wi.scores$pred_sameNPC <- predict(m5, pt.wi.scores)
-
 pt.wi.scores.roc2 <- roc(response = pt.wi.scores$smoker, 
                      predictor = pt.wi.scores$pred_sameNPC)
-
 pt.wi.scores.roc2
+wi.auc.pcs <- pt.wi.scores.roc2$auc
+auc.df <- rbind(auc.df, c("W/I Diff AUC PCS", wi.auc.pcs))
 
-plot.roc(pt.wi.scores.roc2)
+plot.roc(pt.wi.scores.roc2, main = "Prediction of Smoker with PCs1-4: W/I Diff")
+
+m5.scalar <- glm(smoker ~ min_constriction_chg + AUC_chg + slope_chg, family = "binomial", data = pt.wi.scores)
+summary(m5.scalar)
+
+pt.wi.scores$pred_wi_scalar <- predict(m5.scalar, pt.wi.scores)
+pt.wi.scores.roc2 <- roc(response = pt.wi.scores$smoker, 
+                     predictor = pt.wi.scores$pred_wi_scalar)
+pt.wi.scores.roc2
+wi.auc.scalars <- pt.wi.scores.roc2$auc
+auc.df <- rbind(auc.df, c("W/I Diff AUC Scalar Feat", wi.auc.scalars))
+plot.roc(pt.wi.scores.roc2, main = "Prediction of Smoker with Scalar Change Features: W/I Diff")
+
+```
+
+## Compare AUC across models
+```{r compare_auc}
+auc.df$AUC <- round(as.numeric(auc.df$AUC), 3)
+
+knitr::kable(auc.df)
 ```
 
 ## Association with Demog Variables
@@ -1234,12 +1301,34 @@ pt.wi.scores$occasional <- ifelse(pt.wi.scores$user_cat == "occasional", 1, 0)
 ```
 
 ### Post Data
-```{r demogAssoc_post}
+
+Compare PCs to Scalar Features
+```{r corrPC_scalar}
+chart.Correlation(pt.scores[, c("PC1", "PC2", "PC3", "PC4", 
+                                "min_constriction.post", "duration.post", 
+                                "avg_end_percent.post", "slope.post", "AUC.post")])
+
+```
+
+Compare PCs to demog Variables
+```{r corrPC_demog}
 chart.Correlation(pt.scores[, c("PC1", "PC2", "PC3", "PC4", 
                                 "demo_age","male", "thc.post", "thc_chg", "BMI", 
                                 "postConsumpTimeToTest", "smoker", 
                                 "non_user", "daily", "occasional")])
+```
 
+Compare Scalar Features to demog variables
+```{r corrScalar_demog}
+chart.Correlation(pt.scores[, c("min_constriction.post", "duration.post", 
+                                "avg_end_percent.post", "slope.post", "AUC.post", 
+                                "demo_age","male", "thc.post", "thc_chg", "BMI", 
+                                "postConsumpTimeToTest", "smoker", 
+                                "non_user", "daily", "occasional")])
+```
+
+
+```{r demogAssoc_post}
 post.age.m <- lm(demo_age ~ PC1 + PC2 + PC3 + PC4, data = pt.scores)
 summary(post.age.m)
 
@@ -1263,12 +1352,31 @@ summary(post.male.m)
 ```
 
 ### Within Person Difference Data
-```{r demogAssoc_wi}
-chart.Correlation(pt.wi.scores[, c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6", 
+Compare PCs to Scalar Features
+```{r wi_corrPC_scalar}
+chart.Correlation(pt.wi.scores[, c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6",
+                                "min_constriction_chg", "AUC_chg", "duration_chg",
+                                "avg_end_percent_chg", "slope_chg")])
+```
+
+Compare PCs to demog Variables
+```{r wi_corrPC_demog}
+chart.Correlation(pt.wi.scores[, c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6",
                                 "demo_age","male", "thc.post", "thc_chg", "BMI", 
                                 "postConsumpTimeToTest", "smoker", 
                                 "non_user", "daily", "occasional")])
+```
 
+Compare Scalar Features to demog variables
+```{r wi_corrScalar_demog}
+chart.Correlation(pt.wi.scores[, c("min_constriction_chg", "AUC_chg", "duration_chg", 
+                                   "avg_end_percent_chg", "slope_chg", 
+                                "demo_age","male", "thc.post", "thc_chg", "BMI", 
+                                "postConsumpTimeToTest", "smoker", 
+                                "non_user", "daily", "occasional")])
+```
+
+```{r demogAssoc_wi}
 wi.age.m <- lm(demo_age ~ PC1 + PC2 + PC3 + PC4, data = pt.wi.scores)
 summary(wi.age.m)
 
@@ -1342,7 +1450,7 @@ right_0.post.w <- right_0.post.w[order(right_0.post.w$subject_id), ]
 post_gam.df <- data.frame("subject_id" = pt.analytic.df$subject_id,
                           "occ_user" = pt.analytic.df$occasional, 
                           "daily_user" = pt.analytic.df$daily, 
-                          "pct_chg" = I(as.matrix(right_0.post.w[, c(4:602)])))
+                          "pct_chg" = I(as.matrix(right_0.post.w[, c(4:404)])))
 
 m.post_gam <- pffr(pct_chg ~ occ_user + daily_user, data = post_gam.df)
 
@@ -1357,7 +1465,7 @@ right_0.pt.w <- right_0.pt.w[order(right_0.pt.w$subject_id), ]
 wi_gam.df <- data.frame("subject_id" = pt.analytic.df$subject_id,
                           "occ_user" = pt.analytic.df$occasional, 
                           "daily_user" = pt.analytic.df$daily, 
-                          "wi_pct_chg" = I(as.matrix(right_0.pt.w[, c(3:601)])))
+                          "wi_pct_chg" = I(as.matrix(right_0.pt.w[, c(3:403)])))
 
 m.wi_gam <- pffr(wi_pct_chg ~ occ_user + daily_user, data = wi_gam.df)
 
