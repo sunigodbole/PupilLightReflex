@@ -110,10 +110,11 @@ library(refund.shiny)
 library(pROC)
 library(stringr)
 library(PerformanceAnalytics)
-library(gam)
+library(mgcv)
 
 # ps_folder <- "C:/Repositories/Dissertation/PupilSize_img"
-data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data"
+# data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
+data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data" # Work laptop
 # data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data"
 ps_folder <- "202208_PupilLightReflex"
 ```
@@ -906,18 +907,21 @@ wi.plot_pc6 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
   theme_bw()
 ```
 
+Create dataset of scores
+```{r wi_scores}
+wi.scores <- as.data.frame(right_0_wi.fpca$scores)
+names(wi.scores) <- c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6")
+wi.scores$subject_id <- rownames(wi.scores)
+```
+
 ```{r fpca_wi_pc1}
 wi.plot_pc1 
 ```
 
 PC1: Individuals with high scores on PC1 have a weaker minimal constriction at post compared to pre. Individuals with low scores on PC1 have a stronger minimal constriction at post compared to pre.
 
+
 ```{r explore_PC1}
-wi.scores <- as.data.frame(right_0_wi.fpca$scores)
-names(wi.scores) <- c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6")
-wi.scores$subject_id <- rownames(wi.scores)
-
-
 # pc_ind_plots <- function(scores.df, raw.df, pc_plot.df, q, pc= "PC1", id = "subject_id", pc.val = 1, pc_plot.var = "wiPctChg", raw.plot.var = "percent_change"){
 #   q.pc <- quantile(scores.df[, pc], probs = q)
 #   q.ids <- scores.df[scores.df[, pc] > q.pc, id]
@@ -1402,10 +1406,13 @@ summary(wi.male.m)
 ## Backward stepwise selection
 ### POST data
 ```{r step_post}
-post_step.df <- pt.scores[, c("PC1", "PC2", "PC3", "PC4", "smoker")]
+post_step.df <- pt.scores[, c("PC1", "PC2", "PC3", "PC4", "min_constriction.post", 
+                              "duration.post", "avg_end_percent.post", 
+                              "slope.post", "AUC.post", "smoker")]
 
 m.post_step <- glm(smoker ~ PC1 + PC2 + PC3 + PC4, family = "binomial", data = post_step.df)
 post_step.res <- step(m.post_step, direction = "backward")
+summary(post_step.res)
 
 pt.scores$pred_post_step <- predict(post_step.res, pt.scores)
 
@@ -1413,31 +1420,74 @@ pt.scores.roc3 <- roc(response = pt.wi.scores$smoker,
                      predictor = pt.scores$pred_post_step)
 
 pt.scores.roc3
+auc.specific <- data.frame("Post AUC PCs Step", pt.scores.roc3$auc)
+auc.df <- rbind(auc.df, setNames(auc.specific, names(auc.df)))
 
-plot.roc(pt.scores.roc3)
+plot.roc(pt.scores.roc3, main = "Prediction of Smoker with PCs Backward Stepwise -- Post")
+
+
+## Scalar
+m.post_step.scalar <- glm(smoker ~ min_constriction.post + duration.post + 
+                            avg_end_percent.post + slope.post, 
+                          family = "binomial", data = post_step.df)
+post_step.res <- step(m.post_step.scalar, direction = "backward")
+summary(post_step.res)
+pt.scores$pred_post_step.scalar <- predict(post_step.res, pt.scores)
+
+pt.scores.roc3 <- roc(response = pt.wi.scores$smoker, 
+                     predictor = pt.scores$pred_post_step.scalar)
+
+pt.scores.roc3
+auc.specific <- data.frame("Post AUC Scalar Step", pt.scores.roc3$auc)
+auc.df <- rbind(auc.df, setNames(auc.specific, names(auc.df)))
+
+plot.roc(pt.scores.roc3, main = "Prediction of Smoker with Scalar Features Backward Stepwise -- Post")
 ```
 
 ### Within Subject Difference
 ```{r wi_step}
-wi_step.df <- pt.wi.scores[, c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6", "smoker")]
+wi_step.df <- pt.wi.scores[, c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6", 
+                               "min_constriction_chg", "AUC_chg", "duration_chg", 
+                               "avg_end_percent_chg", "slope_chg", "smoker")]
 
 m.wi_step <- glm(smoker ~ PC1 + PC2 + PC3 + PC4 +PC5 +PC6, family = "binomial", data = wi_step.df)
 wi_step.res <- step(m.wi_step, direction = "backward")
 summary(wi_step.res)
 
 pt.wi.scores$pred_wi_step <- predict(wi_step.res, pt.wi.scores)
-
 pt.wi.scores.roc4 <- roc(response = pt.wi.scores$smoker, 
                      predictor = pt.wi.scores$pred_wi_step)
 
 pt.wi.scores.roc4
+auc.specific <- data.frame("W/I Diff AUC PCs Step", pt.wi.scores.roc4$auc)
+auc.df <- rbind(auc.df, setNames(auc.specific, names(auc.df)))
 
-plot.roc(pt.wi.scores.roc4)
+
+plot.roc(pt.wi.scores.roc4, main = "Prediction of Smoker with PCs Backward Stepwise -- W/I Diff")
+
+### Scalar Features
+m.wi_step.scalar <- glm(smoker ~ min_constriction_chg + AUC_chg + duration_chg 
+                 + avg_end_percent_chg + slope_chg,
+                 family = "binomial", data = wi_step.df)
+
+wi_step.res <- step(m.wi_step.scalar, direction = "backward")
+summary(wi_step.res)
+
+pt.wi.scores$pred_wi_step.scalar <- predict(wi_step.res, pt.wi.scores)
+pt.wi.scores.roc4 <- roc(response = pt.wi.scores$smoker, 
+                     predictor = pt.wi.scores$pred_wi_step.scalar)
+
+pt.wi.scores.roc4
+auc.specific <- data.frame("W/I Diff AUC Scalar Step", pt.wi.scores.roc4$auc)
+auc.df <- rbind(auc.df, setNames(auc.specific, names(auc.df)))
+
+
+plot.roc(pt.wi.scores.roc4, main = "Prediction of Smoker with Scalar Features Backward Stepwise -- W/I Diff")
 ```
 
 ## Function on Scalar Regression
 ### Post
-```{r post_gam}
+```{r post_pffr}
 pt.analytic.df <- pt.df[pt.df$subject_id %in% analytic.N, ]
 pt.analytic.df$occasional <- ifelse(pt.analytic.df$user_cat == "occasional", 1, 0)
 pt.analytic.df$daily  <- ifelse(pt.analytic.df$user_cat == "daily", 1, 0)
@@ -1447,27 +1497,77 @@ pt.analytic.df <- pt.analytic.df[order(pt.analytic.df$subject_id), ]
 
 right_0.post.w <- right_0.post.w[order(right_0.post.w$subject_id), ]
 
-post_gam.df <- data.frame("subject_id" = pt.analytic.df$subject_id,
+post_pffr.df <- data.frame("subject_id" = pt.analytic.df$subject_id,
                           "occ_user" = pt.analytic.df$occasional, 
                           "daily_user" = pt.analytic.df$daily, 
                           "pct_chg" = I(as.matrix(right_0.post.w[, c(4:404)])))
+post_pffr.df$subject_id <- as.factor(post_pffr.df$subject_id)
 
-m.post_gam <- pffr(pct_chg ~ occ_user + daily_user, data = post_gam.df)
+m.post_pffr <- pffr(pct_chg ~ occ_user + daily_user +s(subject_id, bs="re"),
+                    data = post_pffr.df, 
+                    algorithm = "bam", 
+                    method = "fREML", 
+                    discrete = T)
 
+summary(m.post_pffr)
+
+par(mfrow = c(1, 3))
+plot(m.post_pffr)
+```
+*What does NA in the output mean?*
+
+```{r post_gam}
+head(right_0.df)
+length(unique(right_0.df$subject_id))
+
+right_0.gam.df <- merge(right_0.post, pt.analytic.df, 
+                        by = c("subject_id", "user_cat"))
+right_0.gam.df$sind <- right_0.gam.df$frame/400
+
+head(right_0.gam.df)
+length(unique(right_0.gam.df$subject_id))
+
+m.post_gam <- mgcv::gam(percent_change ~ s(sind, k=30, bs="cr") + s(sind, by=occasional, k=30, bs = "cr") + s(sind, by=daily, k=30, bs = "cr"), 
+                  data = right_0.gam.df, method = "REML")
 summary(m.post_gam)
 
 ```
 
 ### Within Subject
-```{r wi_fosr}
+```{r wi_fosr_pffr}
 right_0.pt.w <- right_0.pt.w[order(right_0.pt.w$subject_id), ]
 
-wi_gam.df <- data.frame("subject_id" = pt.analytic.df$subject_id,
+wi_pffr.df <- data.frame("subject_id" = pt.analytic.df$subject_id,
                           "occ_user" = pt.analytic.df$occasional, 
                           "daily_user" = pt.analytic.df$daily, 
                           "wi_pct_chg" = I(as.matrix(right_0.pt.w[, c(3:403)])))
+wi_pffr.df$subject_id <- as.factor(wi_pffr.df$subject_id)
 
-m.wi_gam <- pffr(wi_pct_chg ~ occ_user + daily_user, data = wi_gam.df)
+m.wi_pffr <- pffr(wi_pct_chg ~ occ_user + daily_user + s(subject_id, bs="re"),
+                  data = wi_pffr.df,
+                  algorithm = "bam", 
+                  method = "fREML", 
+                  discrete = T)
 
+summary(m.wi_pffr)
+par(mfrow = c(1,3))
+plot(m.wi_pffr)
+```
+
+
+```{r wi_gam}
+head(right_0.pt)
+length(unique(right_0.pt$subject_id))
+
+right_0.pt.gam.df <- merge(right_0.pt, pt.analytic.df, 
+                        by = c("subject_id", "user_cat"))
+right_0.pt.gam.df$sind <- right_0.pt.gam.df$frame/400
+
+head(right_0.pt.gam.df)
+length(unique(right_0.pt.gam.df$subject_id))
+
+m.wi_gam <- mgcv::gam(wiPctChg ~ s(sind, k=30, bs="cr") + s(sind, by=occasional, k=30, bs = "cr") + s(sind, by=daily, k=30, bs = "cr"), 
+                  data = right_0.pt.gam.df, method = "REML")
 summary(m.wi_gam)
+
 ```
