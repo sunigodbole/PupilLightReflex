@@ -13,26 +13,25 @@ output:
 ---
 
 # To Do: 
-1. Truncate data to non-missing samples around frame 400
-2. Compare scalar vs functional AUC curves (need scalar features from Ben)
-3. Fit foSR with gam/bam
-4. Write down mathematical equations for foSR 
-5. Write down mathematical interpretation of the plots. 
+1. Whiteboarding coef in terms of model 
+2. Construct $\beta$ for trajectory of occasional user (mean sturcture)
+3. Construct CI by hand
+4. Add random effect of subject to gam/bam model using slides 6&7 in lecture 11 of FDA class (2-step approach)
+5. Review data for pffr fxn -- NaN in output might indicate missing subjects
+6. Try different number of basis functions start with 15 go to 30
+7. Write down mathematical equations for foSR 
+  + Try to construct point estimate  & CI for occasional user
+8. Write down mathematical interpretation of the plots. 
 
 
 # Task Worked On From Last Week:
-1. Create analytic data set with the same individuals in post and within person difference data sets
-2. AUC with top PCs
-  + Use backward selection to select the best set of PC for prediction
-3. Sub-group analysis
-  + For demographic variables correlated with PCs
-4. Interpret PC3?
-  + Post data PC3 associated with Smoking status
-  + Within Diff data PC3 associated with Smoking status
-5. Look into models with different N -- missing data?
+1.Truncate data to non-missing samples around frame 400
+2. Compare scalar vs functional AUC curves (need scalar features from Ben)
+3. Fit foSR with gam/bam
 6. Function on Scalar Regression (use class notes)
   + Model: $Y_{ij}(t) = f_0(t) + f_1(t)I(user = Occassional) +f_2(t)I(user == Daily) + b_{ij}(t) + e_{ij}(t)$
     + $b_{ij}(t)$ is a random effect (RE) for subject, start modeling with independence assumption between pt-time points and then incorporate RE later
+    
 ## Comments for Ben
 + Correcting export error leading to NA in frame numbers
 + Potentially misaligned data
@@ -56,6 +55,9 @@ output:
   + '**: p < 0.01
   + '*: p < 0.05
   + '.: p < 0.10
+5. Do no use duration variable in scalar feature regressions
+6. $R^2$ for pffr vs gam = 95% vs 25% -- shows that gam is misspecified without RE for subject
+7. edf in pffr output of 1 = shift in intercept, 2 = non-linear effect 
 
 # Background
 Pupil size light reflex to a light test is a potential test to determine a person is under the influence of THC and be able to be use as a field sobriety measures. The goals of the analysis to: 
