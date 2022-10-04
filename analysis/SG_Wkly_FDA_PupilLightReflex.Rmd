@@ -13,8 +13,8 @@ output:
 ---
 
 # To Do: 
-1. Whiteboarding coef in terms of model 
-2. Construct $\beta$ for trajectory of occasional user (mean sturcture)
+1. Whiteboarding coef in terms of model (Mtg: 10/6/2022 )
+2. Construct $\beta$ for trajectory of occasional user (mean structure)
 3. Construct CI by hand
 4. Add random effect of subject to gam/bam model using slides 6&7 in lecture 11 of FDA class (2-step approach)
 5. Review data for pffr fxn -- NaN in output might indicate missing subjects
@@ -115,8 +115,8 @@ library(PerformanceAnalytics)
 library(mgcv)
 
 # ps_folder <- "C:/Repositories/Dissertation/PupilSize_img"
-# data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
-data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data" # Work laptop
+data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
+# data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data" # Work laptop
 # data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data"
 ps_folder <- "202208_PupilLightReflex"
 ```
@@ -367,7 +367,7 @@ Remove Outliers
 ```{r outliers}
 ## Remove known outliers
 ps$outliers <- 0
-# ps$outliers[ps$subject_id == "001-109" & ps$tp == "pre2"] <- 1
+# ps$outliers[ps$subject_id == "001-109" & ps$tp == "pre2"] <- 1 # Ben revised
 ps$outliers[ps$subject_id == "001-060" & ps$tp == "post"] <- 1
 
 ps <- ps[ps$outliers == 0, ]
