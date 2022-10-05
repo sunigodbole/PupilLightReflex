@@ -1429,7 +1429,7 @@ plot.roc(pt.scores.roc3, main = "Prediction of Smoker with PCs Backward Stepwise
 
 
 ## Scalar
-m.post_step.scalar <- glm(smoker ~ min_constriction.post + duration.post + 
+m.post_step.scalar <- glm(smoker ~ min_constriction.post + AUC.post  + 
                             avg_end_percent.post + slope.post, 
                           family = "binomial", data = post_step.df)
 post_step.res <- step(m.post_step.scalar, direction = "backward")
@@ -1468,7 +1468,7 @@ auc.df <- rbind(auc.df, setNames(auc.specific, names(auc.df)))
 plot.roc(pt.wi.scores.roc4, main = "Prediction of Smoker with PCs Backward Stepwise -- W/I Diff")
 
 ### Scalar Features
-m.wi_step.scalar <- glm(smoker ~ min_constriction_chg + AUC_chg + duration_chg 
+m.wi_step.scalar <- glm(smoker ~ min_constriction_chg + AUC_chg 
                  + avg_end_percent_chg + slope_chg,
                  family = "binomial", data = wi_step.df)
 
@@ -1494,7 +1494,7 @@ $$
 Y_{ij}(t) &= f_0(t) + f_1(t)*I(user = occasional) + f_2(t)*I(user = daily) + b_i(t) + \epsilon_i(t)\\
 & b_i(t) \sim GP(0, \Sigma_b) \\
 & \epsilon_i(t) \sim N(0, \sigma_{\epsilon}^2) \\
-&= \sum_{k=1}^K \xi_k\phi_k(x_i) + \sum_{k=1}^K \xi_k\phi_k(x_i)*I(user = occasional) + \sum_{k=1}^K \xi_k\phi_k(x_i)*I(user = daily) + \sum_{k=1}^K \xi_{ik}\phi_k(x_i) + \epsilon_i(t)\\
+&= \sum_{{k_0}=1}^{K_0} \xi_{k_0}\phi_{k_0}(t_i) + \sum_{k=1}^K \xi_k\phi_k(t_i)*I(user = occasional) + \sum_{k=1}^K \xi_k\phi_k(t_i)*I(user = daily) + \sum_{k=1}^K \xi_{ik}\phi_k(t_i) + \epsilon_i(t)\\
 \end{aligned}
 $$
 
@@ -1508,11 +1508,10 @@ pt.analytic.df <- pt.analytic.df[order(pt.analytic.df$subject_id), ]
 
 right_0.post.w <- right_0.post.w[order(right_0.post.w$subject_id), ]
 
-post_pffr.df <- data.frame("subject_id" = pt.analytic.df$subject_id,
+post_pffr.df <- data.frame("subject_id" = as.factor(pt.analytic.df$subject_id),
                           "occ_user" = pt.analytic.df$occasional, 
                           "daily_user" = pt.analytic.df$daily, 
                           "pct_chg" = I(as.matrix(right_0.post.w[, c(4:404)])))
-post_pffr.df$subject_id <- as.factor(post_pffr.df$subject_id)
 
 m.post_pffr <- pffr(pct_chg ~ occ_user + daily_user +s(subject_id, bs="re"),
                     data = post_pffr.df, 
@@ -1540,7 +1539,41 @@ length(unique(right_0.gam.df$subject_id))
 
 m.post_gam <- mgcv::gam(percent_change ~ s(sind, k=30, bs="cr") + s(sind, by=occasional, k=30, bs = "cr") + s(sind, by=daily, k=30, bs = "cr"), 
                   data = right_0.gam.df, method = "REML")
-summary(m.post_gam)
+
+## Create a matrix of residuals
+post_gam.resid <- cbind(right_0.gam.df[, c("subject_id", "frame")], m.post_gam$residuals)
+names(post_gam.resid) <- c("subject_id", "frame", "resid")
+resid_mat <- reshape(post_gam.resid, 
+                     timevar = "frame", 
+                     idvar = "subject_id", 
+                     direction = "wide")
+rownames(resid_mat) <- resid_mat$subject_id
+resid_mat$subject_id <- NULL
+resid_mat <- as.matrix(resid_mat)
+
+post_gam.fpca <- fpca.face(resid_mat, knots = 15)
+
+#Create data frame of eigen functions and attach to original data
+Phi_mat <- as.data.frame(post_gam.fpca$efunctions)
+colnames(Phi_mat) <- paste0("Phi", seq(1, post_gam.fpca$npc))
+Phi_mat$frame <- as.numeric(rownames(Phi_mat)) -1
+
+right_0.gam.df <- merge(right_0.gam.df, Phi_mat, 
+                        by = "frame", 
+                        all.x = T)
+right_0.gam.df <- right_0.gam.df[order(right_0.gam.df$subject_id, right_0.gam.df$frame), ]
+right_0.gam.df$subject_id <- as.factor(right_0.gam.df$subject_id)
+
+post_gam.fri <- mgcv::bam(percent_change ~ 
+                            s(sind, k=30, bs="cr") + 
+                            s(sind, by=occasional, k=30, bs = "cr") + 
+                            s(sind, by=daily, k=30, bs = "cr") +
+                            s(subject_id, by = Phi1, bs="re") + s(subject_id, by = Phi2, bs="re")+
+                            s(subject_id, by = Phi3, bs="re") + s(subject_id, by = Phi4, bs="re"), 
+                          method = "fREML", data = right_0.gam.df, discrete = TRUE)
+
+
+summary(post_gam.fri)
 
 ```
 
