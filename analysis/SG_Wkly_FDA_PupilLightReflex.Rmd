@@ -1574,8 +1574,42 @@ post_gam.fri <- mgcv::bam(percent_change ~
 
 
 summary(post_gam.fri)
+```
+### Plotting trajectory of occasional user
+```{r plot_occ}
+
+post_gam.cov <- vcov.gam(post_gam.fri)
+df_pred_rfi <- data.frame("sind" = unique(right_0.gam.df$sind), "occasional" = 1, "daily" = 0, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = right_0.gam.df$subject_id[1028])
+
+fhat_rfi <- predict(post_gam.fri, newdata=df_pred_rfi, se.fit=TRUE, type = "terms")
+plot.rfi.df <- data.frame("frame" = 0:400, 
+                            "fhat_rfi_f0" = fhat_rfi$fit[, 1] + post_gam.fri$coefficients[1], 
+                            "fhat_rfi_f0.se" = fhat_rfi$se.fit[, 1],
+                            "fhat_rfi_f1" = fhat_rfi$fit[, 2], 
+                            "fhat_rfi_f1.se" = fhat_rfi$se.fit[, 2])
+
+ggplot(data = plot.rfi.df, aes(x = frame, y = fhat_rfi_f0))+
+  geom_line()+
+  geom_line(aes(x=frame, y = fhat_rfi_f0 + 2*fhat_rfi_f0.se), linetype = "longdash")+
+  geom_line(aes(x=frame, y = fhat_rfi_f0 - 2*fhat_rfi_f0.se), linetype = "longdash")+
+  theme_bw()
+
+ggplot(data = plot.rfi.df, aes(x = frame, y = fhat_rfi_f1))+
+  geom_line()+
+  geom_line(aes(x=frame, y = fhat_rfi_f1 + 2*fhat_rfi_f1.se), linetype = "longdash")+
+  geom_line(aes(x=frame, y = fhat_rfi_f1 - 2*fhat_rfi_f1.se), linetype = "longdash")+
+  theme_bw()
+
+ggplot(data = plot.rfi.df, aes(x = frame, y = fhat_rfi_f0+fhat_rfi_f1))+
+  geom_line()+
+  geom_line(aes(x=frame, y = fhat_rfi_f0), col = "blue", linetype = "longdash")+
+  theme_bw()
 
 ```
+
 
 ### Within Subject
 ```{r wi_fosr_pffr}
