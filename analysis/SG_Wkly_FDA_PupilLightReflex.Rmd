@@ -115,8 +115,8 @@ library(PerformanceAnalytics)
 library(mgcv)
 
 # ps_folder <- "C:/Repositories/Dissertation/PupilSize_img"
-data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
-# data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data" # Work laptop
+# data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
+data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data" # Work laptop
 # data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data"
 ps_folder <- "202208_PupilLightReflex"
 ```
@@ -1527,14 +1527,14 @@ plot(m.post_pffr)
 *What does NA in the output mean?*
 
 ```{r post_gam}
-head(right_0.df)
+# head(right_0.df)
 length(unique(right_0.df$subject_id))
 
 right_0.gam.df <- merge(right_0.post, pt.analytic.df, 
                         by = c("subject_id", "user_cat"))
 right_0.gam.df$sind <- right_0.gam.df$frame/400
 
-head(right_0.gam.df)
+# head(right_0.gam.df)
 length(unique(right_0.gam.df$subject_id))
 
 m.post_gam <- mgcv::gam(percent_change ~ s(sind, k=30, bs="cr") + s(sind, by=occasional, k=30, bs = "cr") + s(sind, by=daily, k=30, bs = "cr"), 
@@ -1642,6 +1642,70 @@ length(unique(right_0.pt.gam.df$subject_id))
 
 m.wi_gam <- mgcv::gam(wiPctChg ~ s(sind, k=30, bs="cr") + s(sind, by=occasional, k=30, bs = "cr") + s(sind, by=daily, k=30, bs = "cr"), 
                   data = right_0.pt.gam.df, method = "REML")
-summary(m.wi_gam)
 
+
+## Create a matrix of residuals
+wi_gam.resid <- cbind(right_0.gam.df[, c("subject_id", "frame")], m.post_gam$residuals)
+names(wi_gam.resid) <- c("subject_id", "frame", "resid")
+resid_mat <- reshape(wi_gam.resid,
+                     timevar = "frame",
+                     idvar = "subject_id",
+                     direction = "wide")
+rownames(resid_mat) <- resid_mat$subject_id
+resid_mat$subject_id <- NULL
+resid_mat <- as.matrix(resid_mat)
+
+wi_gam.fpca <- fpca.face(resid_mat, knots = 15)
+wi_gam.fpca$evalues/sum(wi_gam.fpca$evalues)
+
+#Create data frame of eigen functions and attach to original data
+Phi_mat <- as.data.frame(wi_gam.fpca$efunctions)
+colnames(Phi_mat) <- paste0("Phi", seq(1, wi_gam.fpca$npc))
+Phi_mat$frame <- as.numeric(rownames(Phi_mat)) -1
+
+right_0.pt.gam.df <- merge(right_0.pt.gam.df, Phi_mat,
+                        by = "frame",
+                        all.x = T)
+right_0.pt.gam.df <- right_0.pt.gam.df[order(right_0.pt.gam.df$subject_id, right_0.pt.gam.df$frame), ]
+right_0.pt.gam.df$subject_id <- as.factor(right_0.pt.gam.df$subject_id)
+
+wi_gam.fri <- mgcv::bam(wiPctChg ~ s(sind, k=30, bs="cr") + 
+                          s(sind, by=occasional, k=30, bs = "cr") + 
+                          s(sind, by=daily, k=30, bs = "cr")+
+                          s(subject_id, by = Phi1, bs="re") + s(subject_id, by = Phi2, bs="re")+
+                          s(subject_id, by = Phi3, bs="re") + s(subject_id, by = Phi4, bs="re")+
+                          s(subject_id, by = Phi5, bs="re") + s(subject_id, by = Phi6, bs="re"),
+                        method = "fREML", data = right_0.pt.gam.df, discrete = TRUE)
+summary(wi_gam.fri)
+```
+
+### Plotting trajectory of occasional user with within person difference data
+```{r wi.plot_occ}
+wi_gam.coef <- wi_gam.fri$coefficients
+wi_gam.cov <- vcov.gam(wi_gam.fri)
+df_pt_pred_rfi <- data.frame("sind" = unique(right_0.pt.gam.df$sind), "occasional" = 1, "daily" = 0, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, "Phi5" = 0, "Phi6" = 0, 
+                          "subject_id" = right_0.pt.gam.df$subject_id[1])
+
+yhat_pt_rfi <- predict(wi_gam.fri, newdata=df_pt_pred_rfi, se.fit=TRUE, type = "response")
+fhat_pt_rfi <- predict(wi_gam.fri, newdata=df_pt_pred_rfi, se.fit=TRUE, type = "terms")
+
+# design.mat <- PredictMat(post_gam.fri, df_pred_rfi)
+plot.yhat_pt.df <- data.frame("frame" = 0:400, 
+                            "yhat" = yhat_pt_rfi$fit, 
+                            "yhat.se" = yhat_pt_rfi$se.fit)
+
+plot.f_pt.df <- data.frame("frame" = 0:400, 
+                        "fhat_rfi_f0" = fhat_pt_rfi$fit[, 1] + wi_gam.fri$coefficients[1], 
+                        "fhat_rfi_f0.se" = fhat_pt_rfi$se.fit[, 1], 
+                        "fhat_rfi_f1" = fhat_pt_rfi$fit[, 2], 
+                        "fhat_rfi_f1.se" = fhat_pt_rfi$se.fit[, 2])
+
+ggplot(data = plot.yhat_pt.df, aes(x = frame, y = yhat))+
+  geom_line()+
+  geom_line(aes(x=frame, y = yhat + 2*yhat.se), linetype = "longdash")+
+  geom_line(aes(x=frame, y = yhat - 2*yhat.se), linetype = "longdash")+
+  # geom_line(data = plot.f_pt.df, aes(x=frame, y = fhat_rfi_f0+fhat_rfi_f1) ,col = "blue")+
+  theme_bw()
 ```
