@@ -13,21 +13,18 @@ output:
 ---
 
 # To Do: 
-1. Whiteboarding coef in terms of model (Mtg: 10/6/2022 )
-2. Construct $\beta$ for trajectory of occasional user (mean structure)
-3. Construct CI by hand
-4. Add random effect of subject to gam/bam model using slides 6&7 in lecture 11 of FDA class (2-step approach)
-5. Review data for pffr fxn -- NaN in output might indicate missing subjects
-6. Try different number of basis functions start with 15 go to 30
-7. Write down mathematical equations for foSR 
+1. Construct $\beta$ for trajectory of occasional user (mean structure)
+2. Construct CI by hand
+3. Try different number of basis functions start with 15 go to 30
+4. Write down mathematical equations for foSR 
   + Try to construct point estimate  & CI for occasional user
-8. Write down mathematical interpretation of the plots. 
+5. Write down mathematical interpretation of the plots. 
 
 
 # Task Worked On From Last Week:
-1.Truncate data to non-missing samples around frame 400
-2. Compare scalar vs functional AUC curves (need scalar features from Ben)
-3. Fit foSR with gam/bam
+1. Whiteboarding coef in terms of model (Mtg: 10/6/2022 )
+4. Add random effect of subject to gam/bam model using slides 6&7 in lecture 11 of FDA class (2-step approach)
+5. Review data for pffr fxn -- NaN in output might indicate missing subjects
 6. Function on Scalar Regression (use class notes)
   + Model: $Y_{ij}(t) = f_0(t) + f_1(t)I(user = Occassional) +f_2(t)I(user == Daily) + b_{ij}(t) + e_{ij}(t)$
     + $b_{ij}(t)$ is a random effect (RE) for subject, start modeling with independence assumption between pt-time points and then incorporate RE later
@@ -115,8 +112,8 @@ library(PerformanceAnalytics)
 library(mgcv)
 
 # ps_folder <- "C:/Repositories/Dissertation/PupilSize_img"
-# data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
-data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data" # Work laptop
+data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
+# data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data" # Work laptop
 # data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data"
 ps_folder <- "202208_PupilLightReflex"
 ```
@@ -1575,34 +1572,82 @@ post_gam.fri <- mgcv::bam(percent_change ~
 
 summary(post_gam.fri)
 ```
-### Plotting trajectory of occasional user
+### Plotting trajectory of occasional & daily user
 ```{r plot_occ}
 post_gam.coef <- post_gam.fri$coefficients
 post_gam.cov <- vcov.gam(post_gam.fri)
-df_pred_rfi <- data.frame("sind" = unique(right_0.gam.df$sind), "occasional" = 1, "daily" = 0, 
+
+df_pred_non <- data.frame("sind" = unique(right_0.gam.df$sind), "occasional" = 0, "daily" = 0, 
                             "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
                             "Phi4" = 0, 
                           "subject_id" = right_0.gam.df$subject_id[1])
 
-yhat_rfi <- predict(post_gam.fri, newdata=df_pred_rfi, se.fit=TRUE, type = "response")
-fhat_rfi <- predict(post_gam.fri, newdata=df_pred_rfi, se.fit=TRUE, type = "terms")
+lpmat_non <- predict(post_gam.fri, newdata=df_pred_non, se.fit=TRUE, type = "lpmatrix")
 
-# design.mat <- PredictMat(post_gam.fri, df_pred_rfi)
-plot.yhat.df <- data.frame("frame" = 0:400, 
-                            "yhat" = yhat_rfi$fit, 
-                            "yhat.se" = yhat_rfi$se.fit)
 
-plot.f.df <- data.frame("frame" = 0:400, 
-                        "fhat_rfi_f0" = fhat_rfi$fit[, 1] + post_gam.fri$coefficients[1], 
-                        "fhat_rfi_f0.se" = fhat_rfi$se.fit[, 1], 
-                        "fhat_rfi_f1" = fhat_rfi$fit[, 2], 
-                        "fhat_rfi_f1.se" = fhat_rfi$se.fit[, 2])
+df_pred_occ <- data.frame("sind" = unique(right_0.gam.df$sind), "occasional" = 1, "daily" = 0, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = right_0.gam.df$subject_id[1])
 
-ggplot(data = plot.yhat.df, aes(x = frame, y = yhat))+
+lpmat_occ <- predict(post_gam.fri, newdata=df_pred_occ, se.fit=TRUE, type = "lpmatrix")
+
+df_pred_dly <- data.frame("sind" = unique(right_0.gam.df$sind), "occasional" = 0, "daily" = 1, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = right_0.gam.df$subject_id[1])
+
+lpmat_dly <- predict(post_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "lpmatrix")
+
+
+pred_df <- data.frame(frame = rep(seq(0, 400), 3),
+                      user = c(rep("non-user", 401), rep("occasional", 401),rep("daily", 401)), 
+                      mean = c(lpmat_non %*% post_gam.coef, 
+                               lpmat_occ %*% post_gam.coef, lpmat_dly %*% post_gam.coef), 
+                      se = c(sqrt(diag(lpmat_non %*% post_gam.cov %*% t(lpmat_non))), 
+                             sqrt(diag(lpmat_occ %*% post_gam.cov %*% t(lpmat_occ))),
+                             sqrt(diag(lpmat_dly %*% post_gam.cov %*% t(lpmat_dly)))), 
+                      stringsAsFactors = F)
+
+ggplot(data = pred_df, aes(x = frame, y = mean, group = user, col = user))+
   geom_line()+
-  geom_line(aes(x=frame, y = yhat + 2*yhat.se), linetype = "longdash")+
-  geom_line(aes(x=frame, y = yhat - 2*yhat.se), linetype = "longdash")+
-  #geom_line(data = plot.f.df, aes(x=frame, y = fhat_rfi_f0+fhat_rfi_f1) ,col = "blue")+
+  geom_line(aes(x=frame, y = mean + 2*se, group = user, col = user), linetype = "longdash")+
+  geom_line(aes(x=frame, y = mean - 2*se, group = user, col = user), linetype = "longdash")+
+  theme_bw()
+```
+
+```{r coef_effect_plots}
+pred_f0 <- predict(post_gam.fri, newdata=df_pred_non, se.fit=TRUE, type = "terms")
+pred_f1 <- predict(post_gam.fri, newdata=df_pred_occ, se.fit=TRUE, type = "terms")
+pred_f2 <- predict(post_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "terms")
+
+pred_coef_df <- data.frame(frame = seq(0, 400),
+                           f0_hat = pred_f0$fit[, 1], 
+                           f0_se = pred_f0$se.fit[, 1], 
+                           f1_hat = pred_f1$fit[, 2], 
+                           f1_se = pred_f1$se.fit[, 2], 
+                           f2_hat = pred_f2$fit[, 3], 
+                           f2_se = pred_f2$se.fit[, 3])
+
+ggplot(data = pred_coef_df, aes(x=frame, y = f0_hat+post_gam.fri$coefficients[1]))+
+  geom_line()+
+  geom_line(aes(x = frame, y = f0_hat+post_gam.fri$coefficients[1] + 2*f0_se), linetype = "longdash")+
+  geom_line(aes(x = frame, y = f0_hat+post_gam.fri$coefficients[1] - 2*f0_se), linetype = "longdash")+
+  labs(title = "Average Response of a Non-user", ylab = f0_hat)+
+  theme_bw()
+
+ggplot(data = pred_coef_df, aes(x=frame, y = f1_hat))+
+  geom_line()+
+  geom_line(aes(x = frame, y = f1_hat + 2*f1_se), linetype = "longdash")+
+  geom_line(aes(x = frame, y = f1_hat - 2*f1_se), linetype = "longdash")+
+  labs(title = "Difference in Response between Occasional and Non-user")+
+  theme_bw()
+
+ggplot(data = pred_coef_df, aes(x=frame, y = f2_hat))+
+  geom_line()+
+  geom_line(aes(x = frame, y = f2_hat + 2*f2_se), linetype = "longdash")+
+  geom_line(aes(x = frame, y = f2_hat - 2*f2_se), linetype = "longdash")+
+  labs(title = "Difference in Response between Daily and Non-user")+
   theme_bw()
 ```
 
