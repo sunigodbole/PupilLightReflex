@@ -1633,7 +1633,7 @@ ggplot(data = pred_coef_df, aes(x=frame, y = f0_hat+post_gam.fri$coefficients[1]
   geom_line()+
   geom_line(aes(x = frame, y = f0_hat+post_gam.fri$coefficients[1] + 2*f0_se), linetype = "longdash")+
   geom_line(aes(x = frame, y = f0_hat+post_gam.fri$coefficients[1] - 2*f0_se), linetype = "longdash")+
-  labs(title = "Average Response of a Non-user", ylab = f0_hat)+
+  labs(title = "Average Response of a Non-user", ylab = "f0_hat")+
   theme_bw()
 
 ggplot(data = pred_coef_df, aes(x=frame, y = f1_hat))+
@@ -1725,32 +1725,80 @@ summary(wi_gam.fri)
 ```
 
 ### Plotting trajectory of occasional user with within person difference data
-```{r wi.plot_occ}
+```{r wi.plots}
 wi_gam.coef <- wi_gam.fri$coefficients
 wi_gam.cov <- vcov.gam(wi_gam.fri)
-df_pt_pred_rfi <- data.frame("sind" = unique(right_0.pt.gam.df$sind), "occasional" = 1, "daily" = 0, 
+
+df_pred_non <- data.frame("sind" = unique(right_0.pt.gam.df$sind), "occasional" = 0, "daily" = 0, 
                             "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
                             "Phi4" = 0, "Phi5" = 0, "Phi6" = 0, 
                           "subject_id" = right_0.pt.gam.df$subject_id[1])
 
-yhat_pt_rfi <- predict(wi_gam.fri, newdata=df_pt_pred_rfi, se.fit=TRUE, type = "response")
-fhat_pt_rfi <- predict(wi_gam.fri, newdata=df_pt_pred_rfi, se.fit=TRUE, type = "terms")
+lpmat_non <- predict(wi_gam.fri, newdata=df_pred_non, se.fit=TRUE, type = "lpmatrix")
 
-# design.mat <- PredictMat(post_gam.fri, df_pred_rfi)
-plot.yhat_pt.df <- data.frame("frame" = 0:400, 
-                            "yhat" = yhat_pt_rfi$fit, 
-                            "yhat.se" = yhat_pt_rfi$se.fit)
 
-plot.f_pt.df <- data.frame("frame" = 0:400, 
-                        "fhat_rfi_f0" = fhat_pt_rfi$fit[, 1] + wi_gam.fri$coefficients[1], 
-                        "fhat_rfi_f0.se" = fhat_pt_rfi$se.fit[, 1], 
-                        "fhat_rfi_f1" = fhat_pt_rfi$fit[, 2], 
-                        "fhat_rfi_f1.se" = fhat_pt_rfi$se.fit[, 2])
+df_pred_occ <- data.frame("sind" = unique(right_0.pt.gam.df$sind), "occasional" = 1, "daily" = 0, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, "Phi5" = 0, "Phi6" = 0, 
+                          "subject_id" = right_0.pt.gam.df$subject_id[1])
 
-ggplot(data = plot.yhat_pt.df, aes(x = frame, y = yhat))+
+lpmat_occ <- predict(wi_gam.fri, newdata=df_pred_occ, se.fit=TRUE, type = "lpmatrix")
+
+df_pred_dly <- data.frame("sind" = unique(right_0.pt.gam.df$sind), "occasional" = 0, "daily" = 1, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, "Phi5" = 0, "Phi6" = 0, 
+                          "subject_id" = right_0.pt.gam.df$subject_id[1])
+
+lpmat_dly <- predict(wi_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "lpmatrix")
+
+
+pred_df <- data.frame(frame = rep(seq(0, 400), 3),
+                      user = c(rep("non-user", 401), rep("occasional", 401),rep("daily", 401)), 
+                      mean = c(lpmat_non %*% wi_gam.coef, 
+                               lpmat_occ %*% wi_gam.coef, lpmat_dly %*% wi_gam.coef), 
+                      se = c(sqrt(diag(lpmat_non %*% wi_gam.cov %*% t(lpmat_non))), 
+                             sqrt(diag(lpmat_occ %*% wi_gam.cov %*% t(lpmat_occ))),
+                             sqrt(diag(lpmat_dly %*% wi_gam.cov %*% t(lpmat_dly)))), 
+                      stringsAsFactors = F)
+
+ggplot(data = pred_df, aes(x = frame, y = mean, group = user, col = user))+
   geom_line()+
-  geom_line(aes(x=frame, y = yhat + 2*yhat.se), linetype = "longdash")+
-  geom_line(aes(x=frame, y = yhat - 2*yhat.se), linetype = "longdash")+
-  # geom_line(data = plot.f_pt.df, aes(x=frame, y = fhat_rfi_f0+fhat_rfi_f1) ,col = "blue")+
+  geom_line(aes(x=frame, y = mean + 2*se, group = user, col = user), linetype = "longdash")+
+  geom_line(aes(x=frame, y = mean - 2*se, group = user, col = user), linetype = "longdash")+
+  theme_bw()
+```
+
+```{r wicoef_effect_plots}
+pred_f0 <- predict(wi_gam.fri, newdata=df_pred_non, se.fit=TRUE, type = "terms")
+pred_f1 <- predict(wi_gam.fri, newdata=df_pred_occ, se.fit=TRUE, type = "terms")
+pred_f2 <- predict(wi_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "terms")
+
+pred_coef_df <- data.frame(frame = seq(0, 400),
+                           f0_hat = pred_f0$fit[, 1], 
+                           f0_se = pred_f0$se.fit[, 1], 
+                           f1_hat = pred_f1$fit[, 2], 
+                           f1_se = pred_f1$se.fit[, 2], 
+                           f2_hat = pred_f2$fit[, 3], 
+                           f2_se = pred_f2$se.fit[, 3])
+
+ggplot(data = pred_coef_df, aes(x=frame, y = f0_hat + wi_gam.fri$coefficients[1]))+
+  geom_line()+
+  geom_line(aes(x = frame, y = f0_hat+ wi_gam.fri$coefficients[1] + 2*f0_se), linetype = "longdash")+
+  geom_line(aes(x = frame, y = f0_hat+ wi_gam.fri$coefficients[1] - 2*f0_se), linetype = "longdash")+
+  labs(title = "Average Response of a Non-user", ylab = "f0_hat")+
+  theme_bw()
+
+ggplot(data = pred_coef_df, aes(x=frame, y = f1_hat))+
+  geom_line()+
+  geom_line(aes(x = frame, y = f1_hat + 2*f1_se), linetype = "longdash")+
+  geom_line(aes(x = frame, y = f1_hat - 2*f1_se), linetype = "longdash")+
+  labs(title = "Difference in Response between Occasional and Non-user")+
+  theme_bw()
+
+ggplot(data = pred_coef_df, aes(x=frame, y = f2_hat))+
+  geom_line()+
+  geom_line(aes(x = frame, y = f2_hat + 2*f2_se), linetype = "longdash")+
+  geom_line(aes(x = frame, y = f2_hat - 2*f2_se), linetype = "longdash")+
+  labs(title = "Difference in Response between Daily and Non-user")+
   theme_bw()
 ```
