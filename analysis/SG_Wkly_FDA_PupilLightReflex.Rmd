@@ -440,6 +440,7 @@ Plot the Mean and +/- 1 SD functions for the percent change in pupil light refle
 right_0.df <- right.df[right.df$frame >= 0, c("subject_id", "tp", "user_cat", 
                                               "frame", "percent_change")]
 
+right_0.df <- right_0.df[order(right_0.df$subject_id, right_0.df$tp, right_0.df$frame), ]
 
 right_0.w <- reshape(right_0.df, 
                      timevar = "frame", 
@@ -631,11 +632,15 @@ plot_pc5
 ```
 
 ## Create Analytic Sample
-Make sure datasets have the same particpants and are truncated at frame 400
+Make sure datasets have the same participants and are truncated at frame 400
+
+** NEED TO FIND A DIFFERENT WAY TO RESHAPE B/C FIRST PT DOESN'T HAVE FRAME 49 -- RESHAPE ERROR **
 ```{r analyticN}
 right_0.post <- right_0.df[right_0.df$tp == "post", ]
 right_0.post <- right_0.post[right_0.post$frame <= 400, ]
 post.ids <- unique(right_0.post$subject_id)
+
+right_0.post <- right_0.post[order(right_0.post$subject_id, right_0.post$frame), ]
 
 right_0.post.w <- reshape(right_0.post, 
                           timevar = "frame", 
@@ -1682,7 +1687,7 @@ ggplot(data = pred_coef_df, aes(x=frame, y = f2_hat))+
   theme_bw()
 ```
 
-## Plot difference between daily and occasional user
+Plot difference between daily and occasional user
 
 ```{r diff_dly_occ}
 f2_f1 <- (lpmat_dly - lpmat_occ) %*% post_gam.coef
@@ -1700,6 +1705,124 @@ ggplot(data = f2_f1_diff_df, aes(x=frame, y = f2f1_diff))+
   theme_bw()
 ```
 
+### Check for differences between smoker vs non-smoker
+
+```{r smokervnon}
+smoker.gam.df <- merge(right_0.post, pt.analytic.df, 
+                        by = c("subject_id", "user_cat"))
+smoker.gam.df$sind <- smoker.gam.df$frame/400
+smoker.gam.df$smoker <- ifelse(smoker.gam.df$user_cat == "non-user", 0, 1)
+
+m.post_smoker_gam <- mgcv::gam(percent_change ~ s(sind, k=30, bs="cr") + 
+                                 s(sind, by=smoker, k=30, bs = "cr"), 
+                  data = smoker.gam.df, method = "REML")
+
+## Create a matrix of residuals
+post_smoker_gam.resid <- cbind(smoker.gam.df[, c("subject_id", "frame")], m.post_smoker_gam$residuals)
+names(post_smoker_gam.resid) <- c("subject_id", "frame", "resid")
+resid_mat <- reshape(post_smoker_gam.resid, 
+                     timevar = "frame", 
+                     idvar = "subject_id", 
+                     direction = "wide")
+rownames(resid_mat) <- resid_mat$subject_id
+resid_mat$subject_id <- NULL
+resid_mat <- as.matrix(resid_mat)
+
+post_smoker_gam.fpca <- fpca.face(resid_mat, knots = 15)
+
+#Create data frame of eigen functions and attach to original data
+Phi_mat <- as.data.frame(post_smoker_gam.fpca$efunctions)
+colnames(Phi_mat) <- paste0("Phi", seq(1, post_smoker_gam.fpca$npc))
+Phi_mat$frame <- as.numeric(rownames(Phi_mat)) -1
+
+smoker.gam.df <- merge(smoker.gam.df, Phi_mat, 
+                        by = "frame", 
+                        all.x = T)
+smoker.gam.df <- smoker.gam.df[order(smoker.gam.df$subject_id, smoker.gam.df$frame), ]
+smoker.gam.df$subject_id <- as.factor(smoker.gam.df$subject_id)
+
+post_smoker_gam.fri <- mgcv::bam(percent_change ~ 
+                            s(sind, k=30, bs="cr") + 
+                            s(sind, by=smoker, k=30, bs = "cr") +
+                            s(subject_id, by = Phi1, bs="re") + s(subject_id, by = Phi2, bs="re")+
+                            s(subject_id, by = Phi3, bs="re") + s(subject_id, by = Phi4, bs="re"), 
+                          method = "fREML", data = smoker.gam.df, discrete = TRUE)
+
+
+summary(post_smoker_gam.fri)
+
+```
+
+Plot difference between smoker and non-smoker
+```{r plot_smk}
+post_smoker_gam.coef <- post_smoker_gam.fri$coefficients
+post_smoker_gam.cov <- vcov.gam(post_smoker_gam.fri)
+
+df_pred_non <- data.frame("sind" = unique(smoker.gam.df$sind), "smoker" =0, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = smoker.gam.df$subject_id[1])
+
+lpmat_non <- predict(post_smoker_gam.fri, newdata=df_pred_non, se.fit=TRUE, type = "lpmatrix")
+
+
+df_pred_smk <- data.frame("sind" = unique(smoker.gam.df$sind), "smoker" = 1, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = smoker.gam.df$subject_id[1])
+
+lpmat_smk <- predict(post_smoker_gam.fri, newdata=df_pred_smk, se.fit=TRUE, type = "lpmatrix")
+
+pred_df <- data.frame(frame = rep(seq(0, 400), 2),
+                      user = c(rep("non-user", 401), rep("smoker", 401)), 
+                      mean = c(lpmat_non %*% post_smoker_gam.coef, 
+                               lpmat_smk %*% post_smoker_gam.coef), 
+                      se = c(sqrt(diag(lpmat_non %*% post_smoker_gam.cov %*% t(lpmat_non))), 
+                             sqrt(diag(lpmat_smk %*% post_smoker_gam.cov %*% t(lpmat_smk)))), 
+                      stringsAsFactors = F)
+
+ggplot(data = pred_df, aes(x = frame, y = mean, group = user, col = user))+
+  geom_line()+
+  geom_line(aes(x=frame, y = mean + 2*se, group = user, col = user), linetype = "longdash")+
+  geom_line(aes(x=frame, y = mean - 2*se, group = user, col = user), linetype = "longdash")+
+  theme_bw()
+```
+
+
+```{r coef_effect_plots}
+pred_f0 <- predict(post_gam.fri, newdata=df_pred_non, se.fit=TRUE, type = "terms")
+pred_f1 <- predict(post_gam.fri, newdata=df_pred_occ, se.fit=TRUE, type = "terms")
+pred_f2 <- predict(post_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "terms")
+
+pred_coef_df <- data.frame(frame = seq(0, 400),
+                           f0_hat = pred_f0$fit[, 1], 
+                           f0_se = pred_f0$se.fit[, 1], 
+                           f1_hat = pred_f1$fit[, 2], 
+                           f1_se = pred_f1$se.fit[, 2], 
+                           f2_hat = pred_f2$fit[, 3], 
+                           f2_se = pred_f2$se.fit[, 3])
+
+ggplot(data = pred_coef_df, aes(x=frame, y = f0_hat+post_gam.fri$coefficients[1]))+
+  geom_line()+
+  geom_line(aes(x = frame, y = f0_hat+post_gam.fri$coefficients[1] + 2*f0_se), linetype = "longdash")+
+  geom_line(aes(x = frame, y = f0_hat+post_gam.fri$coefficients[1] - 2*f0_se), linetype = "longdash")+
+  labs(title = "Average Response of a Non-user", ylab = "f0_hat")+
+  theme_bw()
+
+ggplot(data = pred_coef_df, aes(x=frame, y = f1_hat))+
+  geom_line()+
+  geom_line(aes(x = frame, y = f1_hat + 2*f1_se), linetype = "longdash")+
+  geom_line(aes(x = frame, y = f1_hat - 2*f1_se), linetype = "longdash")+
+  labs(title = "Difference in Response between Occasional and Non-user")+
+  theme_bw()
+
+ggplot(data = pred_coef_df, aes(x=frame, y = f2_hat))+
+  geom_line()+
+  geom_line(aes(x = frame, y = f2_hat + 2*f2_se), linetype = "longdash")+
+  geom_line(aes(x = frame, y = f2_hat - 2*f2_se), linetype = "longdash")+
+  labs(title = "Difference in Response between Daily and Non-user")+
+  theme_bw()
+```
 
 ### Within Subject
 ```{r wi_fosr_pffr}
