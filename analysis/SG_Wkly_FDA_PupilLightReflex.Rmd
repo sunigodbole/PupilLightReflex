@@ -13,19 +13,22 @@ output:
 ---
 
 # To Do: 
-1. Construct $\beta$ for trajectory of occasional user (mean structure)
-2. Construct CI by hand
-3. Try different number of basis functions start with 15 go to 30
-4. Write down mathematical equations for foSR 
-  + Try to construct point estimate  & CI for occasional user
-5. Write down mathematical interpretation of the plots. 
+1. Construct plot of difference between daily and occasional users
+2. Construct plot of difference between smokers & non-smokers
+3. Investigate weird spike in trajectory plots
+4. Fix f0 coeff plot -- CORRECT SE
+5. Write in interpretation of significant change in coef plots
+6. Try different number of basis functions start with 15 go to 30
+7. Write down mathematical interpretation of the plots. 
 
 
 # Task Worked On From Last Week:
-1. Whiteboarding coef in terms of model (Mtg: 10/6/2022 )
-4. Add random effect of subject to gam/bam model using slides 6&7 in lecture 11 of FDA class (2-step approach)
-5. Review data for pffr fxn -- NaN in output might indicate missing subjects
-6. Function on Scalar Regression (use class notes)
+1. Construct $\beta$ for trajectory of occasional user (mean structure)
+2. Construct CI by hand
+3. Write down mathematical equations for foSR 
+  + Try to construct point estimate  & CI for occasional user
+
+4. Function on Scalar Regression (use class notes)
   + Model: $Y_{ij}(t) = f_0(t) + f_1(t)I(user = Occassional) +f_2(t)I(user == Daily) + b_{ij}(t) + e_{ij}(t)$
     + $b_{ij}(t)$ is a random effect (RE) for subject, start modeling with independence assumption between pt-time points and then incorporate RE later
     
@@ -112,8 +115,8 @@ library(PerformanceAnalytics)
 library(mgcv)
 
 # ps_folder <- "C:/Repositories/Dissertation/PupilSize_img"
-data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
-# data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data" # Work laptop
+# data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
+data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data" # Work laptop
 # data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data"
 ps_folder <- "202208_PupilLightReflex"
 ```
@@ -641,11 +644,27 @@ right_0.post <- right_0.post[right_0.post$frame <= 400, ]
 post.ids <- unique(right_0.post$subject_id)
 
 right_0.post <- right_0.post[order(right_0.post$subject_id, right_0.post$frame), ]
+right_0.post$frame_char <- str_pad(right_0.post$frame, width = 3, side = c("left"), pad = "0")
 
-right_0.post.w <- reshape(right_0.post, 
-                          timevar = "frame", 
+right_0.post.w <- reshape(right_0.post[, c("subject_id","tp", "user_cat", "frame_char", "percent_change")], 
+                          timevar = "frame_char", 
                           idvar = c("subject_id", "tp", "user_cat"), 
                           direction = "wide")
+
+var.order <- c(names(right_0.post.w)[1:3], sort(names(right_0.post.w)[4:length(names(right_0.post.w))]))
+
+right_0.post.w <- right_0.post.w[, var.order]
+
+var.names <- names(right_0.post.w[4:ncol(right_0.post.w)])
+
+right_0.post <- reshape(right_0.post.w, 
+                        varying = post.vars, 
+                        v.names = "percent_change", 
+                        timevar = "frame", 
+                        times = 0:400,
+                        idvar = c("subject_id", "tp", "user_cat"), 
+                        direction = "long")
+
 post.vars <- names(right_0.post.w)[4:ncol(right_0.post.w)]
 
 right_0.pt <- reshape(right_0.df[right_0.df$frame <= 400,], 
@@ -657,10 +676,16 @@ right_0.pt$wiPctChg <- right_0.pt$percent_change.post - right_0.pt$percent_chang
 
 right_0.pt <- right_0.pt[, c("subject_id", "user_cat", "frame", "wiPctChg")]
 
-right_0.pt.w <- reshape(right_0.pt, 
-                     timevar = "frame", 
+right_0.pt <- right_0.pt[order(right_0.pt$subject_id, right_0.pt$frame), ]
+right_0.pt$frame_char <- str_pad(right_0.pt$frame, width = 3, side = c("left"), pad = "0")
+
+right_0.pt.w <- reshape(right_0.pt[, c("subject_id","user_cat", "frame_char", "wiPctChg")], 
+                     timevar = "frame_char", 
                      idvar = c("subject_id", "user_cat"), 
                      direction = "wide")
+var.order2 <- c(names(right_0.pt.w)[1:2], sort(names(right_0.pt.w)[3:length(names(right_0.pt.w))]))
+
+right_0.pt.w <- right_0.pt.w[, var.order2]
 
 # remove rows where all data is missing (e.g. pt didn't have both pre and post)
 allMissing <- rowSums(is.na(right_0.pt.w[, 3:403]))
@@ -678,6 +703,7 @@ right_0.df <- right_0.df[right_0.df$subject_id %in% analytic.N,]
 right_0.post <- right_0.post[right_0.post$subject_id %in% analytic.N, ]
 right_0.post.w <- right_0.post.w[right_0.post.w$subject_id %in% analytic.N ,]
 row.names(right_0.post.w) <- right_0.post.w$subject_id
+
 right_0.pt <- right_0.pt[right_0.pt$subject_id %in% analytic.N, ]
 right_0.pt.w <- right_0.pt.w[right_0.pt.w$subject_id %in% analytic.N, ]
 row.names(right_0.pt.w) <- right_0.pt.w$subject_id
@@ -1515,7 +1541,7 @@ $$
 Y_{ij}(t) &= f_0(t) + f_1(t) \\  
 &=\sum_{k=1}^K \xi_{0k}\phi_{0k}(t_i) + \sum_{k=1}^K \xi_{1k}\phi_{1k}(t_i)\\
 &= \Phi_0\xi_0 + \Phi_1\xi_1\\ 
-&= [ \Phi_0 + \Phi_1 ] \xi
+&= [ \Phi_0, \Phi_1 ] \xi
 \end{aligned}
 $$
 
@@ -1524,7 +1550,8 @@ $$
 \begin{aligned}
 Y_{ij}(t) &= f_0(t) + f_2(t) \\  
 &=\sum_{k=1}^K \xi_{0k}\phi_{0k}(t_i) + \sum_{k=1}^K \xi_{2k}\phi_{2k}(t_i) \\
-&= \Phi_0\xi_0 + \Phi_2\xi_2
+&= \Phi_0\xi_0 + \Phi_2\xi_2\\
+&= [ \Phi_0, \Phi_2 ] \xi
 \end{aligned}
 $$
 
@@ -1559,27 +1586,33 @@ plot(m.post_pffr)
 
 ```{r post_gam}
 # head(right_0.df)
-length(unique(right_0.df$subject_id))
 
 right_0.gam.df <- merge(right_0.post, pt.analytic.df, 
                         by = c("subject_id", "user_cat"))
+
+right_0.gam.df <- right_0.gam.df[order(right_0.gam.df$subject_id, right_0.gam.df$frame), ]
 right_0.gam.df$sind <- right_0.gam.df$frame/400
 
 # head(right_0.gam.df)
-length(unique(right_0.gam.df$subject_id))
 
 m.post_gam <- mgcv::gam(percent_change ~ s(sind, k=30, bs="cr") + s(sind, by=occasional, k=30, bs = "cr") + s(sind, by=daily, k=30, bs = "cr"), 
                   data = right_0.gam.df, method = "REML")
 
 ## Create a matrix of residuals
-post_gam.resid <- cbind(right_0.gam.df[, c("subject_id", "frame")], m.post_gam$residuals)
+post_gam.resid <- cbind(right_0.gam.df[!(is.na(right_0.gam.df$percent_change)), c("subject_id", "frame")], m.post_gam$residuals)
 names(post_gam.resid) <- c("subject_id", "frame", "resid")
-resid_mat <- reshape(post_gam.resid, 
-                     timevar = "frame", 
+post_gam.resid$frame_char <- str_pad(post_gam.resid$frame, width = 3, side = "left", pad = "0")
+
+resid_mat <- reshape(post_gam.resid[, c("subject_id", "frame_char", "resid")], 
+                     timevar = "frame_char", 
                      idvar = "subject_id", 
                      direction = "wide")
 rownames(resid_mat) <- resid_mat$subject_id
 resid_mat$subject_id <- NULL
+resid_names <- names(resid_mat)
+resid_names <- sort(resid_names)
+resid_mat <- resid_mat[, resid_names]
+
 resid_mat <- as.matrix(resid_mat)
 
 post_gam.fpca <- fpca.face(resid_mat, knots = 15)
@@ -1653,22 +1686,21 @@ ggplot(data = pred_df, aes(x = frame, y = mean, group = user, col = user))+
 
 
 ```{r coef_effect_plots}
-pred_f0 <- predict(post_gam.fri, newdata=df_pred_non, se.fit=TRUE, type = "terms")
 pred_f1 <- predict(post_gam.fri, newdata=df_pred_occ, se.fit=TRUE, type = "terms")
 pred_f2 <- predict(post_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "terms")
 
 pred_coef_df <- data.frame(frame = seq(0, 400),
-                           f0_hat = pred_f0$fit[, 1], 
-                           f0_se = pred_f0$se.fit[, 1], 
+                           f0_hat = lpmat_non %*% post_gam.coef, 
+                           f0_se = sqrt(diag(lpmat_non %*% post_gam.cov %*% t(lpmat_non))), 
                            f1_hat = pred_f1$fit[, 2], 
                            f1_se = pred_f1$se.fit[, 2], 
                            f2_hat = pred_f2$fit[, 3], 
                            f2_se = pred_f2$se.fit[, 3])
 
-ggplot(data = pred_coef_df, aes(x=frame, y = f0_hat+post_gam.fri$coefficients[1]))+
+ggplot(data = pred_coef_df, aes(x=frame, y = f0_hat))+
   geom_line()+
-  geom_line(aes(x = frame, y = f0_hat+post_gam.fri$coefficients[1] + 2*f0_se), linetype = "longdash")+
-  geom_line(aes(x = frame, y = f0_hat+post_gam.fri$coefficients[1] - 2*f0_se), linetype = "longdash")+
+  geom_line(aes(x = frame, y = f0_hat + 2*f0_se), linetype = "longdash")+
+  geom_line(aes(x = frame, y = f0_hat - 2*f0_se), linetype = "longdash")+
   labs(title = "Average Response of a Non-user", ylab = "f0_hat")+
   theme_bw()
 
@@ -1679,12 +1711,20 @@ ggplot(data = pred_coef_df, aes(x=frame, y = f1_hat))+
   labs(title = "Difference in Response between Occasional and Non-user")+
   theme_bw()
 
-ggplot(data = pred_coef_df, aes(x=frame, y = f2_hat))+
-  geom_line()+
-  geom_line(aes(x = frame, y = f2_hat + 2*f2_se), linetype = "longdash")+
-  geom_line(aes(x = frame, y = f2_hat - 2*f2_se), linetype = "longdash")+
-  labs(title = "Difference in Response between Daily and Non-user")+
-  theme_bw()
+post_dly_plt <- ggplot(data = pred_coef_df, aes(x=frame, y = f2_hat))+
+                geom_line()+
+                geom_line(aes(x = frame, y = f2_hat + 2*f2_se), linetype = "longdash")+
+                geom_line(aes(x = frame, y = f2_hat - 2*f2_se), linetype = "longdash")+
+                labs(title = "Difference in Response between Daily and Non-user", 
+                     y = "Differenc in Percent Change")+
+                theme_bw()
+post_dly_plt
+
+
+post_dly_plt <- post_dly_plt+annotation_custom(grob = textGrob(label = "Daily user higher minimal constriction"), 
+                                               ymin = 1.5, ymax = 4, 
+                                               xmin = -50, xmax= -50)
+
 ```
 
 Plot difference between daily and occasional user
@@ -1789,23 +1829,20 @@ ggplot(data = pred_df, aes(x = frame, y = mean, group = user, col = user))+
 ```
 
 
-```{r coef_effect_plots}
-pred_f0 <- predict(post_gam.fri, newdata=df_pred_non, se.fit=TRUE, type = "terms")
-pred_f1 <- predict(post_gam.fri, newdata=df_pred_occ, se.fit=TRUE, type = "terms")
-pred_f2 <- predict(post_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "terms")
+```{r smk_coef_effect_plots}
+pred_f0 <- predict(post_smoker_gam.fri, newdata=df_pred_non, se.fit=TRUE, type = "iterms")
+pred_f1 <- predict(post_smoker_gam.fri, newdata=df_pred_smk, se.fit=TRUE, type = "terms")
 
 pred_coef_df <- data.frame(frame = seq(0, 400),
                            f0_hat = pred_f0$fit[, 1], 
                            f0_se = pred_f0$se.fit[, 1], 
                            f1_hat = pred_f1$fit[, 2], 
-                           f1_se = pred_f1$se.fit[, 2], 
-                           f2_hat = pred_f2$fit[, 3], 
-                           f2_se = pred_f2$se.fit[, 3])
+                           f1_se = pred_f1$se.fit[, 2])
 
-ggplot(data = pred_coef_df, aes(x=frame, y = f0_hat+post_gam.fri$coefficients[1]))+
+ggplot(data = pred_coef_df, aes(x=frame, y = f0_hat))+
   geom_line()+
-  geom_line(aes(x = frame, y = f0_hat+post_gam.fri$coefficients[1] + 2*f0_se), linetype = "longdash")+
-  geom_line(aes(x = frame, y = f0_hat+post_gam.fri$coefficients[1] - 2*f0_se), linetype = "longdash")+
+  geom_line(aes(x = frame, y = f0_hat + 2*f0_se), linetype = "longdash")+
+  geom_line(aes(x = frame, y = f0_hat - 2*f0_se), linetype = "longdash")+
   labs(title = "Average Response of a Non-user", ylab = "f0_hat")+
   theme_bw()
 
@@ -1813,14 +1850,7 @@ ggplot(data = pred_coef_df, aes(x=frame, y = f1_hat))+
   geom_line()+
   geom_line(aes(x = frame, y = f1_hat + 2*f1_se), linetype = "longdash")+
   geom_line(aes(x = frame, y = f1_hat - 2*f1_se), linetype = "longdash")+
-  labs(title = "Difference in Response between Occasional and Non-user")+
-  theme_bw()
-
-ggplot(data = pred_coef_df, aes(x=frame, y = f2_hat))+
-  geom_line()+
-  geom_line(aes(x = frame, y = f2_hat + 2*f2_se), linetype = "longdash")+
-  geom_line(aes(x = frame, y = f2_hat - 2*f2_se), linetype = "longdash")+
-  labs(title = "Difference in Response between Daily and Non-user")+
+  labs(title = "Difference in Response between Smoker and Non-user")+
   theme_bw()
 ```
 
