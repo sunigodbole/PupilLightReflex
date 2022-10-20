@@ -112,8 +112,8 @@ library(PerformanceAnalytics)
 library(mgcv)
 
 # ps_folder <- "C:/Repositories/Dissertation/PupilSize_img"
-# data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
-data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data" # Work laptop
+data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
+# data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data" # Work laptop
 # data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data"
 ps_folder <- "202208_PupilLightReflex"
 ```
@@ -1509,7 +1509,8 @@ $$
 \begin{aligned}
 Y_{ij}(t) &= f_0(t) + f_1(t) \\  
 &=\sum_{k=1}^K \xi_{0k}\phi_{0k}(t_i) + \sum_{k=1}^K \xi_{1k}\phi_{1k}(t_i)\\
-&= \Phi_0\xi_0 + \Phi_1\xi_1
+&= \Phi_0\xi_0 + \Phi_1\xi_1\\ 
+&= [ \Phi_0 + \Phi_1 ] \xi
 \end{aligned}
 $$
 
@@ -1678,6 +1679,24 @@ ggplot(data = pred_coef_df, aes(x=frame, y = f2_hat))+
   geom_line(aes(x = frame, y = f2_hat + 2*f2_se), linetype = "longdash")+
   geom_line(aes(x = frame, y = f2_hat - 2*f2_se), linetype = "longdash")+
   labs(title = "Difference in Response between Daily and Non-user")+
+  theme_bw()
+```
+
+## Plot difference between daily and occasional user
+
+```{r diff_dly_occ}
+f2_f1 <- (lpmat_dly - lpmat_occ) %*% post_gam.coef
+f2_f1.se <- sqrt(diag((lpmat_dly - lpmat_occ) %*% post_gam.cov %*% t((lpmat_dly - lpmat_occ))))
+
+f2_f1_diff_df <- data.frame(frame = seq(0, 400), 
+                            f2f1_diff = f2_f1, 
+                            f2f1_se = f2_f1.se)
+
+ggplot(data = f2_f1_diff_df, aes(x=frame, y = f2f1_diff))+
+  geom_line()+
+  geom_line(aes(x = frame, y = f2f1_diff + 2*f2f1_se), linetype = "longdash")+
+  geom_line(aes(x = frame, y = f2f1_diff - 2*f2f1_se), linetype = "longdash")+
+  labs(title = "Difference between Average Daily vs Occasional User", ylab = "f2_hat - f1_hat")+
   theme_bw()
 ```
 
