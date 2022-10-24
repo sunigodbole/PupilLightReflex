@@ -9,36 +9,30 @@ output:
 ---
 
 # Background
-Pupil size light reflex to a light test is a potential test to determine a person is under the influence of THC and be able to be use as a field sobriety measures. The goals of the analysis to: 
+Pupil size reflex to a light test is a potential test to determine if a person is under the influence of THC and can be used as a field sobriety measure. For this analysis we'll be using methods from a statistical area called functional data analysis (FDA) which allows us to model the entire trajectory of the pupil reflex for each subject and discern differences between groups in the trajectories and in specific areas of the trajectory. This is in contrast to more traditional techniques which require extracting single summary measures such as the point of minimal constriction.  
 
-## Potential Topics
-1. Determine the variability of pupil light reflex in a sober population
-2. Determine the effectiveness of pupil light reflex to measure sobriety after smoking THC 
-    Question - dose response?
-3. Jointly model pupil light reflex and blink rate during a light test (another data set)
+## What is Functional Data Analysis? 
 
-Pupil size reflex to light does not habituated to THC use (smoking).
+Functional Data analysis (FDA) is a field of statistics that models curves or trajectories of information without extracting pre-defined specific features. It allows us examine the sources of variation of these curves (fPCA), how differences in the patterns of the curves relate to an outcome, and how the patterns of the curves differ based on individual characteristics.   
 
-Time for smoking to post test maybe an important variable to model b/c: 
+## Summary of Findings
 
-+ effects of THC reduce with time
-+ currently time from smoke period to post are all similar so we might not see an effect
++ Functional Principal Components Analysis
+    + variation explained mostly by minimal constriction and rebound shapes
++ Prediction Analysis:
+    + AUC values range form 0.68 - 0.71
+    + 1st 4 PCs from the fPCA analysis for within person difference data (WPD) have the higher prediction ability
++ Some association between demographic variables and PCs
++ Function on Scalar Regression (FoSR)
+    + Significant differences between occasional and non-users in the minimal constriction time interval 
+    + Significant differences between smokers and non-smokers in the minimal constriction time interval 
 
-There is a circadian pattern to pupil size (https://www.ncbi.nlm.nih.gov/pmc/articles/PMC7445830/). 
 
-## Experimental Design
-+ Setting: Office
-  + Were the lights ON/OFF during testing (JW)
-
-## Features of Importance
-1. Point of minimal constriction -- more dilation after smoking
-2. Rebound dilation
-+ Ideally the non-user data should have little change from pre to post but there may be some "habituation" to the test?
 
 ## Data summary
-Data on pupil size during light reflex test. Pupil size was extracted at the image level based on image analysis techniques. Each test was performed simultaneously on right and left eye before and after THC use (smoking).
+Full pupil trajectories of pupil size during light reflex test. Pupil size was extracted at the image level based on image analysis techniques (Ben Steinhart's video segmentation pipeline). Each test was performed simultaneously on right and left eye before and after THC use (smoking).
 
-+ USE percent change for analysis
++ Outcome: percent change from baseline
 + Start at frame 0 
 + End of test is not strictly defined (with FoS we shouldn't need to define the end of the test)
 
@@ -170,13 +164,6 @@ non_user.id <- pt.df$subject_id[pt.df$user_cat == "non-user"]
 # View(testTimes[testTimes$subject_id %in% non_user.id, ])
 ```
 
-## Table 1
-No Consumption end time recorded for non-users
-```{r tab1, echo=FALSE}
-# Demographics Table by User Category
-table1(~ demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg|user_cat, 
-       data = pt.df)
-```
 
 ```{r outliers, echo=FALSE}
 ## Remove known outliers
@@ -187,7 +174,12 @@ ps$outliers[ps$subject_id == "001-060" & ps$tp == "post"] <- 1
 ps <- ps[ps$outliers == 0, ]
 ```
 
+# Exploratory Analysis
+
 Plot of PRE/POST for Right Eye
+
+We'd examined the plot for the left and right eye and found them to be similar, so for this analysis we'll used data from the right eye and we'll explore the additional information provided by modeling both eye in the future.
+
 ```{r rightEye_plots, echo=FALSE}
 right.df <- ps[ps$eye == "Right", ]
 
@@ -197,14 +189,16 @@ right.df <- ps[ps$eye == "Right", ]
 #   labs(title ="Pupil Size by Pre/Post and THC use category")+
 #   theme_bw()
 
-ggplot(right.df, aes(x=frame, y = percent_change, group = subject_id, color = subject_id))+
-  geom_line(show.legend = FALSE)+
+ggplot(right.df, aes(x=frame, y = percent_change, group = subject_id))+
+  geom_line(show.legend = FALSE, alpha = 0.5)+
   facet_grid(rows = vars(user_cat), cols = vars(tp))+
   labs(title = "Percent Change by Pre/Post and THC use category")+
   theme_bw()
 ```
 
-# Exploratory Analysis
+I see some attenuation of the initial light reflex response between pre and post measures in most participants, but there is a lot of variability in the recovery trajectories (both duration and shape). We'll be exploring if these differences are significantly related to the participant's THC use category and if there might be differences by smoker vs non-smoker.
+
+Most participant's are missing data after frame 400.
 
 ```{r mean_sd_functions, include=FALSE}
 right_0.df <- right.df[right.df$frame >= 0, c("subject_id", "tp", "user_cat", 
@@ -256,7 +250,8 @@ sd_fxn <- as.data.frame(aggregate(right_0.w[, 4:602],
 ```
 
 ## Analytic Sample
-Make sure datasets have the same participants and are truncated at frame 400
+
+There were 84 participants with both pre and post data which constituted the analytic sample. 
 
 ```{r analyticN, echo = F}
 right_0.post <- right_0.df[right_0.df$tp == "post", ]
@@ -328,25 +323,20 @@ right_0.pt.w <- right_0.pt.w[right_0.pt.w$subject_id %in% analytic.N, ]
 row.names(right_0.pt.w) <- right_0.pt.w$subject_id
 ```
 
-No Consumption end time recorded for non-users
-```{r tab1_analyticN, echo = F}
-# Demographics Table by User Category
-table1(~demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg|user_cat, 
-       data = pt.df[pt.df$subject_id %in% analytic.N, ])
-```
-
-
 ## Post Data and Within Person Difference (WPD) Trajectories 
-```{r postPlot, echo = F}
-post_traj <- ggplot(right_0.post, aes(x=frame, y = percent_change, group = subject_id, color = subject_id))+
-             geom_line(show.legend = FALSE)+
+
+Within person difference trajectories (WPD) were calculated at a frame by frame subtraction of the pre-trajectory from the post trajectory (e.g. post - pre). 
+
+```{r postPlot, echo = F, warning=FALSE, fig.height = 6, fig.width = 10}
+post_traj <- ggplot(right_0.post, aes(x=frame, y = percent_change, group = subject_id))+
+             geom_line(show.legend = FALSE, alpha = 0.5)+
              facet_grid(rows = vars(user_cat))+
-             labs(title ="POST Data Percent Change by THC Use Category", 
+             labs(title ="POST Data Percent Change by THC", 
                   y = "Percent Change")+
              theme_bw()
 
-wi_traj <- ggplot(right_0.pt, aes(x=frame, y = wiPctChg, group = subject_id, color = subject_id))+
-           geom_line(show.legend = FALSE)+
+wi_traj <- ggplot(right_0.pt, aes(x=frame, y = wiPctChg, group = subject_id))+
+           geom_line(show.legend = FALSE, alpha = 0.5)+
            facet_grid(rows = vars(user_cat))+
            labs(title ="WPD Percent Change by THC", 
                 y = "WPD in Percent Change")+
@@ -355,7 +345,15 @@ wi_traj <- ggplot(right_0.pt, aes(x=frame, y = wiPctChg, group = subject_id, col
 grid.arrange(post_traj, wi_traj, nrow = 1)
 ```
 
-*Non-user plot seems "centered" around 0 but still showing heterogeneity. Lots of heterogeneity across user-groups, but a mostly positive difference.*
+Post Data: 
+
++ Lots of heterogeneity in the post profiles
++ Seemly like there's more variability in the recovery period for daily user (long duration)
+
+Within Person Difference (WPD) data:
+
++ Lots of heterogeneity across user-groups, but a mostly positive difference (indicating a less constriction at post).
++ Non-user plot seems "centered" around 0 but still showing heterogeneity. 
 
 ```{r getLegend, echo = F}
 g_legend<-function(a.gplot){
@@ -367,12 +365,13 @@ g_legend<-function(a.gplot){
 
 # Analysis
 
-## fPCA
+## functional Principal Components Analysis (fPCA)
+Similar to PCA, fPCA is a method to quantify the sources of variation in the data. With fPCA, we're finding functions or "shapes" that describe variation. 
 
 ### fPCA post data
 Truncating to frame 400
 
-```{r fPCA_post, echo = F}
+```{r fPCA_post, echo = F, fig.height = 6, fig.width = 10}
 right_0.fpca <- fpca.face(Y = as.matrix(right_0.post.w[, 4:404]), pve = 0.95, knots = 30, var = T)
 
 right_0.fpca.pve <- round(right_0.fpca$evalues/sum(right_0.fpca$evalues)*100, 2)
@@ -446,8 +445,14 @@ grid.arrange(plot_pc1+theme(legend.position = "none"),
              nrow = 2, ncol = 3)
 ```
 
+For the post data: 
+
++ PC1 seems to show variation in the minimal constriction value. Participants with high loading (+2SD) on PC1 would have a less constriction while participants with a low loading (-2SD) would have a more constriction than an average individual. 
+
++PC2 seems to show differences in the the overall shape of the trajectory and the pattern of recovery. High loading indicates a less than average constriction and slow recovery over time (and a double dip), while a low loading indicates more than average constriction and marked recovery over the test period.
+
 ### fPCA Within Person Differences
-```{r fPCA_withinPersonChange, echo=F}
+```{r fPCA_withinPersonChange, echo=F, fig.height = 6, fig.width = 10}
 right_0_wi.fpca <- fpca.face(Y = as.matrix(right_0.pt.w[, 3:403]), pve = 0.95, knots = 30, var = T)
 # str(right_0.fpca)
 
@@ -474,7 +479,7 @@ wi.plot_pc1 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
   geom_line(aes(x = frame, y = mu+errband1, color = "+2SD"))+
   geom_line(aes(x = frame, y = mu-errband1, color = "-2SD"))+
   labs(x = "frame", 
-       y = "Percent Change", 
+       y = "Difference in Percent Change", 
        color = "Legend", 
        title = paste("PC1:", "% Var Explained:", right_0_wi.fpca.pve[1]))+
   scale_color_manual(values = colors)+
@@ -485,7 +490,7 @@ wi.plot_pc2 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
   geom_line(aes(x = frame, y = mu+errband2, color = "+2SD"))+
   geom_line(aes(x = frame, y = mu-errband2, color = "-2SD"))+
   labs(x = "frame", 
-       y = "Percent Change", 
+       y = "Difference in Percent Change", 
        color = "Legend", 
        title = paste("PC2:", "% Var Explained:", right_0_wi.fpca.pve[2]))+
   scale_color_manual(values = colors)+
@@ -496,7 +501,7 @@ wi.plot_pc3 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
   geom_line(aes(x = frame, y = mu+errband3, color = "+2SD"))+
   geom_line(aes(x = frame, y = mu-errband3, color = "-2SD"))+
   labs(x = "frame", 
-       y = "Percent Change", 
+       y = "Difference in Percent Change", 
        color = "Legend", 
        title = paste("PC3:", "% Var Explained:", right_0_wi.fpca.pve[3]))+
   scale_color_manual(values = colors)+
@@ -507,7 +512,7 @@ wi.plot_pc4 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
   geom_line(aes(x = frame, y = mu+errband4, color = "+2SD"))+
   geom_line(aes(x = frame, y = mu-errband4, color = "-2SD"))+
   labs(x = "frame", 
-       y = "Percent Change", 
+       y = "Difference in Percent Change", 
        color = "Legend", 
        title = paste("PC4:", "% Var Explained:", right_0_wi.fpca.pve[4]))+
   scale_color_manual(values = colors)+
@@ -518,7 +523,7 @@ wi.plot_pc5 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
   geom_line(aes(x = frame, y = mu+errband5, color = "+2SD"))+
   geom_line(aes(x = frame, y = mu-errband5, color = "-2SD"))+
   labs(x = "frame", 
-       y = "Percent Change", 
+       y = "Difference in Percent Change", 
        color = "Legend", 
        title = paste("PC5:", "% Var Explained:", right_0_wi.fpca.pve[5]))+
   scale_color_manual(values = colors)+
@@ -529,7 +534,7 @@ wi.plot_pc6 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
   geom_line(aes(x = frame, y = mu+errband6, color = "+2SD"))+
   geom_line(aes(x = frame, y = mu-errband6, color = "-2SD"))+
   labs(x = "frame", 
-       y = "Percent Change", 
+       y = "Difference in Percent Change", 
        color = "Legend", 
        title = paste("PC6:", "% Var Explained:", right_0_wi.fpca.pve[6]))+
   scale_color_manual(values = colors)+
@@ -541,14 +546,17 @@ grid.arrange(wi.plot_pc1+theme(legend.position = "none"),
              wi.plot_pc2+theme(legend.position = "none"), 
              wi.plot_pc3+theme(legend.position = "none"), 
              wi.plot_pc4+theme(legend.position = "none"),
-             wi.plot_pc5+theme(legend.position = "none"),
-             wi.plot_pc6+theme(legend.position = "none"),
              legend_wiPC,
-             layout_matrix = rbind(c(1,2,7), c(3,4,7), c(5,6,7)),
+             layout_matrix = rbind(c(1,2,5), c(3,4,5)),
              widths = c(10, 10, 3),
-             nrow = 3, ncol = 3)
+             nrow = 2, ncol = 3)
 ```
 
+For WPD (post - pre) data: 
+
++ PC1 show the overall shape of the difference trajectory. High loading (+2SD) on PC1 shows less constriction at post vs pre (shown by initial positive increase) and a consistently less negative trajectory at post but the difference reducing over time. Low loading (-2SD) on PC1 shows more constriction at post vs pre. 
+
++ PC2 shows differences in minimal constriction and recovery. High loading on PC2 shows less constriction at post vs pre (marked) and less recovery at post. Low loading on PC2 shows more constriction at post vs pre and less recovery at pre.  
 
 ```{r wi_scores, echo = F}
 wi.scores <- as.data.frame(right_0_wi.fpca$scores)
@@ -581,7 +589,7 @@ pt.scores <- merge(post_right_scores, pt.df,
 pt.scores$smoker <- ifelse(pt.scores$user_cat %in% c("daily", "occasional"),1, 0)
 ```
 
-```{r auc, echo = F}
+```{r auc, echo = F, message = F}
 m1 <- glm(smoker ~ PC1 + PC2 + PC3 +PC4, family = "binomial", data = pt.scores)
 # summary(m1)
 pt.scores$pred <- predict(m1, pt.scores)
@@ -635,9 +643,15 @@ legend(0.5, 0.35, legend = c(paste0("post PCs AUC: ",round(post.auc.pc4, 3)),
                                  paste0("WPD PCs AUC: ", round(wi.auc.pcs, 3)),
                                  paste0("WPD Scalar Features AUC: ", round(wi.auc.scalars, 3))),
        col = c("black", "darkred", "darkblue", "darkgreen"), 
-       lty = rep(1, 4), cex = 0.8, box.lty=0)
+       lty = rep(1, 4), cex = 0.8, bty="n")
 
 ```
+
+WPD = Within Person differences
+
+For this analysis we were comparing the ability to predict smoker vs non-smoker using the first 4 PCs from the fPCA or scalar features in the post and within person difference (WPD) data. For each curve, a separate logistic regression model was fit with either the first 4 PCs from fPCA or the scalar features: minimal constriction, AUC and slope. For the WPD models the scalar feature represented the change in minimal constriction, AUC and slope. Predictions of smoker vs non-smoker were made with the logistic models and then an ROC curve was created to show the sensitivity (true positive rate) vs 1-specificity (1-true negative rate = false positive rate). Comparing the area under the curve (AUC) of the ROC curves shows the predictive ability of the each model. 
+
+From this analysis, we can see that a model of the within person difference (WPD) with the first 4 PCs from the fPCA analysis have the highest predictive ability. 
 
 
 ```{r compare_auc, include = F}
@@ -646,7 +660,7 @@ auc.df$AUC <- round(as.numeric(auc.df$AUC), 3)
 knitr::kable(auc.df)
 ```
 
-## Association with Demog Variables
+## Association with Demographic Variables
 
 ```{r demogAssoc_prep, echo = F}
 pt.scores$male <- ifelse(pt.scores$demo_gender == "Male", 1, 0)
@@ -780,106 +794,10 @@ wi.male.m <- glm(male ~ PC1 + PC2 + PC3 + PC4 +PC5 + PC6, family = "binomial", d
 # summary(wi.male.m)
 ```
 
-## Backward Stepwise Selection
-
-```{r step_post, echo=F, results='hide'}
-post_step.df <- pt.scores[, c("PC1", "PC2", "PC3", "PC4", "min_constriction.post", 
-                              "duration.post", "avg_end_percent.post", 
-                              "slope.post", "AUC.post", "smoker")]
-
-m.post_step <- glm(smoker ~ PC1 + PC2 + PC3 + PC4, family = "binomial", data = post_step.df)
-post_step.res <- step(m.post_step, direction = "backward")
-# summary(post_step.res)
-# post_step.res$coefficients[-1]
-
-post_step.df$pred_post_step <- predict(post_step.res, pt.scores)
-
-pt.scores.roc3 <- roc(response = post_step.df$smoker, 
-                     predictor = post_step.df$pred_post_step)
-
-# pt.scores.roc3
-auc.specific <- data.frame("Post AUC PCs Step", pt.scores.roc3$auc)
-auc.df <- rbind(auc.df, setNames(auc.specific, names(auc.df)))
-
-plot.roc(pt.scores.roc3, 
-         col = "black")
-
-## Scalar
-m.post_step.scalar <- glm(smoker ~ min_constriction.post + AUC.post  + 
-                            avg_end_percent.post + slope.post, 
-                          family = "binomial", data = post_step.df)
-post_step.res <- step(m.post_step.scalar, direction = "backward")
-# summary(post_step.res)
-# post_step.res$coefficients[-1]
-post_step.df$pred_post_step.scalar <- predict(post_step.res, pt.scores)
-
-pt.scalar.roc3 <- roc(response = post_step.df$smoker, 
-                     predictor = post_step.df$pred_post_step.scalar)
-
-# pt.scalar.roc3
-auc.specific <- data.frame("Post AUC Scalar Step", pt.scalar.roc3$auc)
-auc.df <- rbind(auc.df, setNames(auc.specific, names(auc.df)))
-
-plot.roc(pt.scalar.roc3, 
-         col = "darkred", 
-         add = T)
-
-## Within Person differences
-wi_step.df <- pt.wi.scores[, c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6", 
-                               "min_constriction_chg", "AUC_chg", "duration_chg", 
-                               "avg_end_percent_chg", "slope_chg", "smoker")]
-
-m.wi_step <- glm(smoker ~ PC1 + PC2 + PC3 + PC4 +PC5 +PC6, family = "binomial", data = wi_step.df)
-wi_step.res <- step(m.wi_step, direction = "backward")
-# wi_step.res$coeffcients[-1]
-# summary(wi_step.res)
-
-wi_step.df$pred_wi_step <- predict(wi_step.res, pt.wi.scores)
-pt.wi.scores.roc4 <- roc(response = wi_step.df$smoker, 
-                     predictor = wi_step.df$pred_wi_step)
-
-# pt.wi.scores.roc4
-auc.specific <- data.frame("W/I Diff AUC PCs Step", pt.wi.scores.roc4$auc)
-auc.df <- rbind(auc.df, setNames(auc.specific, names(auc.df)))
-
-plot.roc(pt.wi.scores.roc4,
-         col = "darkblue", 
-         add = T)
-
-### Scalar Features
-m.wi_step.scalar <- glm(smoker ~ min_constriction_chg + AUC_chg 
-                 + avg_end_percent_chg + slope_chg,
-                 family = "binomial", data = wi_step.df)
-
-wi_step.res <- step(m.wi_step.scalar, direction = "backward")
-# summary(wi_step.res)
-# wi_step.res$coefficients[-1]
-
-wi_step.df$pred_wi_step.scalar <- predict(wi_step.res, pt.wi.scores)
-pt.wi.scalar.roc4 <- roc(response = wi_step.df$smoker, 
-                     predictor = wi_step.df$pred_wi_step.scalar)
-
-# pt.wi.scalar.roc4
-auc.specific <- data.frame("W/I Diff AUC Scalar Step", pt.wi.scalar.roc4$auc)
-auc.df <- rbind(auc.df, setNames(auc.specific, names(auc.df)))
-
-plot.roc(pt.wi.scalar.roc4, 
-         col = "darkgreen", 
-         add = T)
-legend(0.5, 0.35, legend = c(paste0("post PCs AUC: ",round(pt.scores.roc3$auc, 3)),
-                                 paste0("post Scalar Features AUC: ",round(pt.scalar.roc3$auc, 3)), 
-                                 paste0("WPD PCs AUC: ", round(pt.wi.scores.roc4$auc, 3)),
-                                 paste0("WPD Scalar Features AUC: ", round(pt.wi.scalar.roc4$auc, 3))),
-       col = c("black", "darkred", "darkblue", "darkgreen"), 
-       lty = rep(1, 4), cex = 0.8, box.lty=0)
-```
-
-+ Post PCs Selected: PC3 and PC4
-+ Post Scalar Features Selected: Minimal Constriction and AUC
-+ WPD PCs Selected: PC1, PC2, PC3, PC5
-+ WPD Scalar Features Selected: Change in minimal constriction
 
 ## Function on Scalar Regression
+
+Function on Scalar Regression (FoSR) is a regression method that regresses the full trajectory of the pupil light reflex (e.g. function) on set of scalar predictor, in this case THC user category and accounts for the between subject variability with a random effect term. This analysis allows us to examine differences in trajectories or parts of the trajectory by THC user group.   
 
 ```{r pt_analytic, echo = F}
 pt.analytic.df <- pt.df[pt.df$subject_id %in% analytic.N, ]
@@ -1001,7 +919,6 @@ post_userTraj <- grid.arrange(arrangeGrob(post_userProfile+theme(legend.position
                               legend_userProfile, nrow = 1, 
                               widths = c(30, 6))
 ```
-
 
 ```{r coef_effect_plots, echo = F, fig.show = 'hide'}
 pred_f1 <- predict(post_gam.fri, newdata=df_pred_occ, se.fit=TRUE, type = "terms")
@@ -1393,6 +1310,8 @@ wi_userTraj <- grid.arrange(arrangeGrob(wi_userProfile+theme(legend.position = "
 grid.arrange(post_userTraj, wi_userTraj, ncol = 2)
 ```
 
+Left plot is visualizing the average trajectory of each user category (left) and then adding the 2*SE intervals for each trajectory (right) for post data, while the right plot shows similar mean and mean +/- 2SE trajectories for within person difference (WPD). The mean and mean +/- 2SE were separated for visual clarity. We can see that the mean trajectories occasional and daily user are more similar than that of non-users in both the post and WPD; however after accounting for the variation between subjects the trajectoreis are not completely separable. 
+
 
 ```{r wicoef_effect_plots, echo = F, fig.show = 'hide'}
 pred_f1 <- predict(wi_gam.fri, newdata=df_pred_occ, se.fit=TRUE, type = "terms")
@@ -1437,10 +1356,10 @@ wi_dly_plt <- ggplot(data = pred_coef_df, aes(x=frame, y = f2_hat))+
 
 ylab <- textGrob(label = "Difference in WPD in Percent Change", rot = 90, 
                  gp = gpar(fontsize = 12))
-posval <- textGrob(label = sapply(strwrap("Less WPD Constriction in User", width = 15, simplify = F),
+posval <- textGrob(label = sapply(strwrap("More WPD Constriction in User", width = 15, simplify = F),
                                   paste, collapse = "\n"), rot = 0, 
                  gp = gpar(fontsize = 8))
-negval <- textGrob(label = sapply(strwrap("More WPD Constriction in User", width = 15, simplify = F),
+negval <- textGrob(label = sapply(strwrap("Less WPD Constriction in User", width = 15, simplify = F),
                                   paste, collapse = "\n"), rot = 0, 
                  gp = gpar(fontsize = 8))
 
@@ -1459,11 +1378,15 @@ wi_dly_coef <- grid.arrange(ylab, posval, negval, wi_dly_plt,
 grid.arrange(post_occ_coef, wi_occ_coef, ncol = 2)
 ```
 
+This plot compares the difference between occasional and non-users for post and WPD data. In the post data there is significant positive difference in the occasional and non-users from frame 50 - 125 which would indicate that occasional user have less constriction during this time. In the WPD data there is a significant positive difference in the occasional and non-users from frame 10 - 175, indicating a greater difference in the difference between post and pre for the occasional vs non-user. Since the typical response has a positive difference between post and pre during this interval caused by less constriction at post compared to pre, we can say that there is even less constriction in post data of an occasional user compared to his/her pre than in a non-user. 
+
 ### Difference between Daily and Non-Users
 
 ```{r dly_coef_plt, echo=FALSE, fig.height = 6, fig.width=15}
 grid.arrange(post_dly_coef, wi_dly_coef, ncol = 2)
 ```
+
+These results are similar to the occassional vs non-user but less pronounced maybe indicating more variability in daily and non-users. 
 
 ```{r wi_diff_dly_occ, echo = F, fig.show= 'hide'}
 f2_f1 <- (lpmat_dly - lpmat_occ) %*% wi_gam.coef
@@ -1486,14 +1409,14 @@ wi_dlyocc_plt <- ggplot(data = f2_f1_diff_df, aes(x=frame, y = f2f1_diff))+
 
 ylab <- textGrob(label = "Difference in WPD in Percent Change", rot = 90, 
                  gp = gpar(fontsize = 12))
-posval <- textGrob(label = sapply(strwrap("Less Constriction in Daily User", width = 15, simplify = F),
+posval <- textGrob(label = sapply(strwrap("More Constriction in Daily User", width = 15, simplify = F),
                                   paste, collapse = "\n"), rot = 0, just = "bottom", 
                  gp = gpar(fontsize = 8))
-negval <- textGrob(label = sapply(strwrap("More Constriction in Daily User", width = 15, simplify = F),
+negval <- textGrob(label = sapply(strwrap("Less Constriction in Daily User", width = 15, simplify = F),
                                   paste, collapse = "\n"), rot = 0, 
                  gp = gpar(fontsize = 8))
 
-wi_dlyocc_coef <- grid.arrange(ylab, posval, negval, post_dlyocc_plt, 
+wi_dlyocc_coef <- grid.arrange(ylab, posval, negval, wi_dlyocc_plt, 
                                  ncol = 2, nrow = 2, 
                                  layout_matrix = rbind(c(1, 2, rep(4, 15)), c(1, 3, rep(4, 15))))
 ```
@@ -1503,6 +1426,8 @@ wi_dlyocc_coef <- grid.arrange(ylab, posval, negval, post_dlyocc_plt,
 ```{r dlyocc_coef_plt, echo = F, fig.height = 6, fig.width=15}
 grid.arrange(post_dlyocc_coef, wi_dlyocc_coef, ncol = 2)
 ```
+
+There is no siginificant difference between occassional and daily users. 
 
 ## Difference in Between Smoker vs Non-smokers
 
@@ -1623,6 +1548,7 @@ wi_smk <- grid.arrange(arrangeGrob(wi_smkProfile+theme(legend.position = "none")
 grid.arrange(post_smk, wi_smk, nrow = 2)
 ```
 
+Showing mean trajectories for the post and WPD data for smokers vs non-smokers. 
 
 ```{r wi_smk_coef_effect_plots, echo= F, fig.show = 'hide'}
 # pred_f0 <- predict(post_smoker_gam.fri, newdata=df_pred_non, se.fit=TRUE, type = "iterms")
@@ -1654,10 +1580,10 @@ wi_smk_plt <- ggplot(data = pred_coef_df, aes(x=frame, y = f1_hat))+
 
 ylab <- textGrob(label = "Difference in WPD in Percent Change", rot = 90, 
                  gp = gpar(fontsize = 12))
-posval <- textGrob(label = sapply(strwrap("Less WPD Constriction in User", width = 15, simplify = F),
+posval <- textGrob(label = sapply(strwrap("More WPD Constriction in User", width = 15, simplify = F),
                                   paste, collapse = "\n"), rot = 0, 
                  gp = gpar(fontsize = 8))
-negval <- textGrob(label = sapply(strwrap("More WPD Constriction in User", width = 15, simplify = F),
+negval <- textGrob(label = sapply(strwrap("Less WPD Constriction in User", width = 15, simplify = F),
                                   paste, collapse = "\n"), rot = 0, 
                  gp = gpar(fontsize = 8))
 
@@ -1671,8 +1597,125 @@ wi_smk_coef <- grid.arrange(ylab, posval, negval, wi_smk_plt,
 grid.arrange(post_smk_coef , wi_smk_coef, nrow = 1)
 ```
 
+Similar to the results from the specific user category analysis, in the post data we see a significant positive difference in percent change between smokers and non-smokers at frames 60- 110 with smokers having less constriction. In the WPD data, there's a siginificant positive difference in the within person difference between smokers and non-smokers from frame 10 - 125 indicating a more difference from pre to post in smokers compared to non-smokers. Similar to before with a typical positive difference from pre to post during this interval indicating less constriction at post, this result can be viewed as saying that if we had two individuals (one smoker and one non-smoker) with the same trajectory at pre the smoker would have a less constriction after smoking compared to the non-smoker. 
 
 # Appendix
+
+## Table 1: All Subjects
+No Consumption end time recorded for non-users
+```{r tab1, echo=FALSE}
+# Demographics Table by User Category
+table1(~ demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg|user_cat, 
+       data = pt.df)
+```
+
+
+## Table 1: Analytic Sample
+No Consumption end time recorded for non-users
+```{r tab1_analyticN, echo = F}
+# Demographics Table by User Category
+table1(~demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg|user_cat, 
+       data = pt.df[pt.df$subject_id %in% analytic.N, ])
+```
+
+## Backward Stepwise Selection
+
+```{r step_post, echo=F, results='hide', message=FALSE}
+post_step.df <- pt.scores[, c("PC1", "PC2", "PC3", "PC4", "min_constriction.post", 
+                              "duration.post", "avg_end_percent.post", 
+                              "slope.post", "AUC.post", "smoker")]
+
+m.post_step <- glm(smoker ~ PC1 + PC2 + PC3 + PC4, family = "binomial", data = post_step.df)
+post_step.res <- step(m.post_step, direction = "backward")
+# summary(post_step.res)
+# post_step.res$coefficients[-1]
+
+post_step.df$pred_post_step <- predict(post_step.res, pt.scores)
+
+pt.scores.roc3 <- roc(response = post_step.df$smoker, 
+                     predictor = post_step.df$pred_post_step)
+
+# pt.scores.roc3
+auc.specific <- data.frame("Post AUC PCs Step", pt.scores.roc3$auc)
+auc.df <- rbind(auc.df, setNames(auc.specific, names(auc.df)))
+
+plot.roc(pt.scores.roc3, 
+         col = "black")
+
+## Scalar
+m.post_step.scalar <- glm(smoker ~ min_constriction.post + AUC.post  + 
+                            avg_end_percent.post + slope.post, 
+                          family = "binomial", data = post_step.df)
+post_step.res <- step(m.post_step.scalar, direction = "backward")
+# summary(post_step.res)
+# post_step.res$coefficients[-1]
+post_step.df$pred_post_step.scalar <- predict(post_step.res, pt.scores)
+
+pt.scalar.roc3 <- roc(response = post_step.df$smoker, 
+                     predictor = post_step.df$pred_post_step.scalar)
+
+# pt.scalar.roc3
+auc.specific <- data.frame("Post AUC Scalar Step", pt.scalar.roc3$auc)
+auc.df <- rbind(auc.df, setNames(auc.specific, names(auc.df)))
+
+plot.roc(pt.scalar.roc3, 
+         col = "darkred", 
+         add = T)
+
+## Within Person differences
+wi_step.df <- pt.wi.scores[, c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6", 
+                               "min_constriction_chg", "AUC_chg", "duration_chg", 
+                               "avg_end_percent_chg", "slope_chg", "smoker")]
+
+m.wi_step <- glm(smoker ~ PC1 + PC2 + PC3 + PC4 +PC5 +PC6, family = "binomial", data = wi_step.df)
+wi_step.res <- step(m.wi_step, direction = "backward")
+# wi_step.res$coeffcients[-1]
+# summary(wi_step.res)
+
+wi_step.df$pred_wi_step <- predict(wi_step.res, pt.wi.scores)
+pt.wi.scores.roc4 <- roc(response = wi_step.df$smoker, 
+                     predictor = wi_step.df$pred_wi_step)
+
+# pt.wi.scores.roc4
+auc.specific <- data.frame("W/I Diff AUC PCs Step", pt.wi.scores.roc4$auc)
+auc.df <- rbind(auc.df, setNames(auc.specific, names(auc.df)))
+
+plot.roc(pt.wi.scores.roc4,
+         col = "darkblue", 
+         add = T)
+
+### Scalar Features
+m.wi_step.scalar <- glm(smoker ~ min_constriction_chg + AUC_chg 
+                 + avg_end_percent_chg + slope_chg,
+                 family = "binomial", data = wi_step.df)
+
+wi_step.res <- step(m.wi_step.scalar, direction = "backward")
+# summary(wi_step.res)
+# wi_step.res$coefficients[-1]
+
+wi_step.df$pred_wi_step.scalar <- predict(wi_step.res, pt.wi.scores)
+pt.wi.scalar.roc4 <- roc(response = wi_step.df$smoker, 
+                     predictor = wi_step.df$pred_wi_step.scalar)
+
+# pt.wi.scalar.roc4
+auc.specific <- data.frame("W/I Diff AUC Scalar Step", pt.wi.scalar.roc4$auc)
+auc.df <- rbind(auc.df, setNames(auc.specific, names(auc.df)))
+
+plot.roc(pt.wi.scalar.roc4, 
+         col = "darkgreen", 
+         add = T)
+legend(0.5, 0.35, legend = c(paste0("post PCs AUC: ",round(pt.scores.roc3$auc, 3)),
+                                 paste0("post Scalar Features AUC: ",round(pt.scalar.roc3$auc, 3)), 
+                                 paste0("WPD PCs AUC: ", round(pt.wi.scores.roc4$auc, 3)),
+                                 paste0("WPD Scalar Features AUC: ", round(pt.wi.scalar.roc4$auc, 3))),
+       col = c("black", "darkred", "darkblue", "darkgreen"), 
+       lty = rep(1, 4), cex = 0.8, box.lty=0)
+```
+
++ Post PCs Selected: PC3 and PC4
++ Post Scalar Features Selected: Minimal Constriction and AUC
++ WPD PCs Selected: PC1, PC2, PC3, PC5
++ WPD Scalar Features Selected: Change in minimal constriction
 
 ## FoSR
 $$ 
