@@ -134,6 +134,7 @@ library(PerformanceAnalytics)
 library(mgcv)
 library(grid)
 library(gridExtra)
+library(haven)
 
 # ps_folder <- "C:/Repositories/Dissertation/PupilSize_img"
 # data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
@@ -271,6 +272,42 @@ non_user.id <- pt.df$subject_id[pt.df$user_cat == "non-user"]
 # View(testTimes[testTimes$subject_id %in% non_user.id, ])
 ```
 
+Add VAS data
+```{r vasReadIn}
+vs <- read_sas(file.path(data_folder, ps_folder, "urban102.sas7bdat"))
+
+vs <- vs[, c("subject_id", "period", "vas")]
+
+attr(vs$subject_id, "label") <- NULL
+attr(vs$subject_id, "format.sas") <- NULL
+
+vas.post <- vs[vs$period == "POST", ]
+vas.post$period <- NULL
+names(vas.post)[names(vas.post) == "vas"] <- "vas.post"
+
+vas.pre <- vs[vs$period == "PRE", ]
+vas.pre$period <- NULL
+names(vas.pre)[names(vas.pre) == "vas"] <- "vas.pre"
+
+vas.w <- merge(vas.pre, vas.post, by = "subject_id")
+
+vas.w$diff <- vas.w$vas.post - vas.w$vas.pre
+summary(vas.w$diff)
+## no difference between pre and post vas
+
+vas.w <- vas.w[, c("subject_id", "vas.pre")]
+names(vas.w)[names(vas.w) == "vas.pre"] <- "vas"
+
+pt.df <- merge(pt.df, vas.w, 
+               by = "subject_id", 
+               all.x = T)
+
+ps <- merge(ps, vas.w, 
+               by = "subject_id")
+```
+
+
+
 ## Table 1
 No Consumption end time recorded for non-users
 ```{r tab1}
@@ -393,13 +430,6 @@ ps$outliers[ps$subject_id == "001-060" & ps$tp == "post"] <- 1
 
 ps <- ps[ps$outliers == 0, ]
 ```
-
-Add VAS data
-```{r vasReadIn}
-
-
-```
-
 
 ## Data Visualization
 Plot of Pupil Size and Percent Change for "PRE" data by Eye and User Category
