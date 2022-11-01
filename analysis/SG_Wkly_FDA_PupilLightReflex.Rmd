@@ -14,7 +14,18 @@ output:
 
 # To Do: 
 1. Try different number of basis functions start with 15 go to 30
-2. Write down mathematical interpretation of the plots. 
+2. Write down mathematical interpretation of the plots.
+3. Compare between AUCs for prediction models
+4. Convert frames to time (rate should be specified in Ben's paper)
+5. Scalar on Function Regression
+6. Covariance between left and right eye 
+    + (frame by frame)
+    + investigate time series correlation metrics
+7. Regression using VAS score to define "high" vs "not" in occasional smokers
+8. Time from Consumption to test -- WPD add FoSR
+9. Create a document with results to send to the collaborators
+
+
 
 # Collaborator Meeting Notes
 1. Assess optimal threshold from logistic regression analyses (Youdon's J)
@@ -287,7 +298,7 @@ hist(ps$lagPctChg[ps$frame > 150], breaks = 1000)
 
 ps.150 <- ps[ps$frame > 150  & ps$eye == "Right", ]
 
-pot.misaligned <- unique(ps.150[ps.150$lagPctChg <= -5,  c("subject_id", "time", "user_type", "eye")])
+pot.misaligned <- unique(ps.150[ps.150$lagPctChg <= -15,  c("subject_id", "time", "user_type", "eye")])
 pot.misaligned <- pot.misaligned[!(is.na(pot.misaligned$subject_id)), ]
 pot.misaligned$misaligned  <- 1
 
@@ -383,6 +394,12 @@ ps$outliers[ps$subject_id == "001-060" & ps$tp == "post"] <- 1
 ps <- ps[ps$outliers == 0, ]
 ```
 
+Add VAS data
+```{r vasReadIn}
+
+
+```
+
 
 ## Data Visualization
 Plot of Pupil Size and Percent Change for "PRE" data by Eye and User Category
@@ -424,17 +441,18 @@ Plots of Left and Right Eye for "POST" data. One pt has negative values for pupi
 ```{r post_plots}
 post.df <- ps[ps$tp == "post", ] 
 
-ggplot(post.df, aes(x=frame, y = pupil_size, group = subject_id))+
-  geom_line(show.legend = FALSE, alpha = 0.5)+
-  facet_grid(rows = vars(user_cat), cols = vars(eye))+
-  labs(title ="Pupil Size by Eye and THC use category")+
-  theme_bw()
-
-
 ggplot(post.df, aes(x=frame, y = percent_change, group = subject_id))+
   geom_line(show.legend = FALSE, alpha = 0.5)+
   facet_grid(rows = vars(user_cat), cols = vars(eye))+
-  labs(title = "Percent Change by Eye and THC use category")+
+  labs(title = "Percent Change by Eye and THC use category - Post")+
+  theme_bw()
+
+pre.df <- ps[ps$tp == "pre2", ] 
+
+ggplot(pre.df, aes(x=frame, y = percent_change, group = subject_id))+
+  geom_line(show.legend = FALSE, alpha = 0.5)+
+  facet_grid(rows = vars(user_cat), cols = vars(eye))+
+  labs(title = "Percent Change by Eye and THC use category - Pre")+
   theme_bw()
 ```
 
@@ -704,7 +722,86 @@ right_0.pt.w <- right_0.pt.w[!(rownames(right_0.pt.w) %in% rowsAllMissing), ]
 
 rownames(right_0.pt.w) <- paste0(right_0.pt.w$subject_id, "_", right_0.pt.w$user_cat)
 
-analytic.N <- post.ids[post.ids %in% right_0.pt.w$subject_id]
+
+################################# ----------------------------- Left eye
+left_0.df <- ps[ps$time == "post" & ps$eye == "Left", ]
+left_0.post <- ps[ps$time == "post" & ps$eye == "Left", ]
+left_0.post <- left_0.post[left_0.post$frame >= 0 & left_0.post$frame <= 400, ]
+left.post.ids <- unique(left_0.post$subject_id)
+
+left_0.post <- left_0.post[order(left_0.post$subject_id, left_0.post$frame), ]
+left_0.post$frame_char <- str_pad(left_0.post$frame, width = 3, side = c("left"), pad = "0")
+
+left_0.post.w <- reshape(left_0.post[, c("subject_id","tp", "user_cat", "frame_char", "percent_change")], 
+                          timevar = "frame_char", 
+                          idvar = c("subject_id", "tp", "user_cat"), 
+                          direction = "wide")
+
+var.order <- c(names(left_0.post.w)[1:3], sort(names(left_0.post.w)[4:length(names(left_0.post.w))]))
+
+left_0.post.w <- left_0.post.w[, var.order]
+
+var.names <- names(left_0.post.w[4:ncol(left_0.post.w)])
+
+left_0.post <- reshape(left_0.post.w, 
+                        varying = var.names, 
+                        v.names = "percent_change", 
+                        timevar = "frame", 
+                        times = 0:400,
+                        idvar = c("subject_id", "tp", "user_cat"), 
+                        direction = "long")
+
+
+left_0.pt <- reshape(ps[ps$eye == "Left" & ps$frame >=0 & ps$frame <= 400, c("subject_id", "user_cat", "tp", "frame", "percent_change")], 
+                      timevar = "tp", 
+                      idvar = c("subject_id", "user_cat", "frame"), 
+                      direction = "wide")
+
+left_0.pt$wiPctChg <- left_0.pt$percent_change.post - left_0.pt$percent_change.pre2
+
+left_0.pt <- left_0.pt[, c("subject_id", "user_cat", "frame", "wiPctChg")]
+
+left_0.pt <- left_0.pt[order(left_0.pt$subject_id, left_0.pt$frame), ]
+left_0.pt$frame_char <- str_pad(left_0.pt$frame, width = 3, side = c("left"), pad = "0")
+
+left_0.pt.w <- reshape(left_0.pt[, c("subject_id","user_cat", "frame_char", "wiPctChg")], 
+                     timevar = "frame_char", 
+                     idvar = c("subject_id", "user_cat"), 
+                     direction = "wide")
+var.order2 <- c(names(left_0.pt.w)[1:2], sort(names(left_0.pt.w)[3:length(names(left_0.pt.w))]))
+
+left_0.pt.w <- left_0.pt.w[, var.order2]
+
+# remove rows where all data is missing (e.g. pt didn't have both pre and post)
+allMissing <- rowSums(is.na(left_0.pt.w[, 3:403]))
+rowsAllMissing <- names(allMissing)[allMissing == 401]
+
+left_0.pt.w <- left_0.pt.w[!(rownames(left_0.pt.w) %in% rowsAllMissing), ]
+
+rownames(left_0.pt.w) <- paste0(left_0.pt.w$subject_id, "_", left_0.pt.w$user_cat)
+
+## Find intersection of all participant files across data sets to define the analytic subjects
+
+analytic.N <- intersect(unique(left_0.df$subject_id), unique(left_0.post$subject_id))
+analytic.N <- intersect(analytic.N, unique(left_0.post.w$subject_id))
+analytic.N <- intersect(analytic.N, unique(left_0.pt$subject_id))
+analytic.N <- intersect(analytic.N, unique(left_0.pt.w$subject_id))
+analytic.N <- intersect(analytic.N, unique(right_0.df$subject_id))
+analytic.N <- intersect(analytic.N, unique(right_0.post$subject_id))
+analytic.N <- intersect(analytic.N, unique(right_0.post.w$subject_id))
+analytic.N <- intersect(analytic.N, unique(right_0.pt$subject_id))
+analytic.N <- intersect(analytic.N, unique(right_0.pt.w$subject_id))
+
+## Filter all datasets to analytic sample
+
+left_0.df <- left_0.df[left_0.df$subject_id %in% analytic.N,]
+left_0.post <- left_0.post[left_0.post$subject_id %in% analytic.N, ]
+left_0.post.w <- left_0.post.w[left_0.post.w$subject_id %in% analytic.N ,]
+row.names(left_0.post.w) <- left_0.post.w$subject_id
+
+left_0.pt <- left_0.pt[left_0.pt$subject_id %in% analytic.N, ]
+left_0.pt.w <- left_0.pt.w[left_0.pt.w$subject_id %in% analytic.N, ]
+row.names(left_0.pt.w) <- left_0.pt.w$subject_id
 
 ## Filter all datasets to analytic sample
 
