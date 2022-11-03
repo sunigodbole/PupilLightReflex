@@ -312,7 +312,7 @@ ps <- merge(ps, vas.w,
 No Consumption end time recorded for non-users
 ```{r tab1}
 # Demographics Table by User Category
-table1(~ demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg|user_cat, 
+table1(~ demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg + vas|user_cat, 
        data = pt.df)
 ```
 
@@ -461,7 +461,7 @@ ggplot(right.df, aes(x=frame, y = pupil_size, group = subject_id))+
   theme_bw()
 
 ggplot(right.df, aes(x=frame, y = percent_change, group = subject_id))+
-  geom_line(show.legend = FALSE, , alpha = 0.5)+
+  geom_line(show.legend = FALSE, alpha = 0.5)+
   facet_grid(rows = vars(user_cat), cols = vars(tp))+
   labs(title = "Percent Change by Pre/Post and THC use category")+
   theme_bw()
@@ -573,8 +573,9 @@ df_plot <- data.frame(frame = seq(0, 400, by = 1),
                       errband1 = 2*right_Phi[, 1]*right_sd[1], 
                       errband2 = 2*right_Phi[, 2]*right_sd[2], 
                       errband3 = 2*right_Phi[, 3]*right_sd[3], 
-                      errband4 = 2*right_Phi[, 4]*right_sd[4], 
-                      errband5 = 2*right_Phi[, 5]*right_sd[5])
+                      errband4 = 2*right_Phi[, 4]*right_sd[4]
+                      #,errband5 = 2*right_Phi[, 5]*right_sd[5]
+                      )
 
 colors <- c("Pop.Mean" = "black", "+2SD" = "red", "-2SD" = "blue")
 
@@ -622,31 +623,40 @@ plot_pc4 <- ggplot(data = df_plot, aes(x = frame, y = mu))+
   scale_color_manual(values = colors)+
   theme_bw()
 
-plot_pc5 <- ggplot(data = df_plot, aes(x = frame, y = mu))+
-  geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband5, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband5, color = "-2SD"))+
-  labs(x = "frame", 
-       y = "Percent Change", 
-       color = "Legend", 
-       title = paste("PC5:", "% Var Explained:", right_0.fpca.pve[5]))+
-  scale_color_manual(values = colors)+
-  theme_bw()
+# plot_pc5 <- ggplot(data = df_plot, aes(x = frame, y = mu))+
+#   geom_line(aes(color = "Pop.Mean"))+
+#   geom_line(aes(x = frame, y = mu+errband5, color = "+2SD"))+
+#   geom_line(aes(x = frame, y = mu-errband5, color = "-2SD"))+
+#   labs(x = "frame", 
+#        y = "Percent Change", 
+#        color = "Legend", 
+#        title = paste("PC5:", "% Var Explained:", right_0.fpca.pve[5]))+
+#   scale_color_manual(values = colors)+
+#   theme_bw()
 
 legend_postPC <- g_legend(plot_pc1)
 
 blank <- grid.rect(gp=gpar(col="white"))
 
+# grid.arrange(plot_pc1+theme(legend.position = "none"), 
+#              plot_pc2+theme(legend.position = "none"), 
+#              plot_pc3+theme(legend.position = "none"), 
+#              plot_pc4+theme(legend.position = "none"),
+#              plot_pc5+theme(legend.position = "none"),
+#              blank,
+#              legend_postPC,
+#              layout_matrix = rbind(c(1,2,3,7), c(4,5, 6 , 7)),
+#              widths = c(10, 10, 10, 3),
+#              nrow = 2, ncol = 4)
+
 grid.arrange(plot_pc1+theme(legend.position = "none"), 
              plot_pc2+theme(legend.position = "none"), 
              plot_pc3+theme(legend.position = "none"), 
              plot_pc4+theme(legend.position = "none"),
-             plot_pc5+theme(legend.position = "none"),
-             blank,
              legend_postPC,
-             layout_matrix = rbind(c(1,2,3,7), c(4,5, 6 , 7)),
-             widths = c(10, 10, 10, 3),
-             nrow = 2, ncol = 4)
+             layout_matrix = rbind(c(1,2,5), c(3,4,5)),
+             widths = c(10, 10, 3),
+             nrow = 2, ncol = 3)
 
 ```
 
@@ -848,7 +858,7 @@ row.names(right_0.pt.w) <- right_0.pt.w$subject_id
 No Consumption end time recorded for non-users
 ```{r tab1_analyticN}
 # Demographics Table by User Category
-table1(~demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg|user_cat, 
+table1(~demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg +vas|user_cat, 
        data = pt.df[pt.df$subject_id %in% analytic.N, ])
 ```
 
