@@ -861,7 +861,7 @@ No Consumption end time recorded for non-users
 ```{r tab1_analyticN}
 # Demographics Table by User Category
 table1(~demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg +vas|user_cat, 
-       data = pt.df[pt.df$subject_id %in% analytic_LR.N, ])
+       data = pt.df[pt.df$subject_id %in% analytic.N, ])
 ```
 
 
@@ -1376,12 +1376,19 @@ pt.scores$smoker <- ifelse(pt.scores$user_cat %in% c("daily", "occasional"),1, 0
 
 
 ```{r auc, echo = F, message = F}
+auc_inference <- data.frame(subject_id = pt.scores$subject_id, 
+                            smoker = pt.scores$smoker,
+                            stringsAsFactors = F)
+
 m1 <- glm(smoker ~ PC1 + PC2 + PC3 +PC4, family = "binomial", data = pt.scores)
 # summary(m1)
 pt.scores$pred <- predict(m1, pt.scores)
 pt.scores.roc <- roc(response = pt.scores$smoker, predictor = pt.scores$pred)
 # pt.scores.roc
 post.auc.pc4 <- pt.scores.roc$auc
+
+auc_inference$post_PC_aucScores <- pt.scores.roc$original.predictor
+
 
 plot.roc(pt.scores.roc, main = "Prediction of Smoker by PCs and Scalar Features in Post and WPD")
 
@@ -1392,6 +1399,8 @@ pt.scalar.roc <- roc(response = pt.scores$smoker, predictor = pt.scores$pred)
 # pt.scalar.roc
 post.auc.scalar <- pt.scalar.roc$auc
 plot.roc(pt.scalar.roc, main = "", add = T, col = "darkred")
+
+auc_inference$post_SF_aucScores <- pt.scalar.roc$original.predictor
 
 auc.df <- data.frame("Label" = c("Post AUC PCs", "Post AUC Scalar Feat"), 
                      "AUC" = c(post.auc.pc4, post.auc.scalar), 
@@ -1411,6 +1420,9 @@ auc.df <- rbind(auc.df, c("W/I Diff AUC PCS", wi.auc.pcs))
 plot.roc(pt.wi.scores.roc2, 
          col = "darkblue", 
          add = T)
+
+wpd_auc <- pt.wi.scores[, c("subject_id", "smoker")]
+wpd_auc$wpd_PC_aucScores <- pt.wi.scores.roc2$original.predictor
 
 m5.scalar <- glm(smoker ~ min_constriction_chg + AUC_chg + slope_chg, family = "binomial", data = pt.wi.scores)
 # summary(m5.scalar)
