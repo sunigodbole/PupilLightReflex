@@ -666,7 +666,7 @@ grid.arrange(plot_pc1+theme(legend.position = "none"),
 *PC2 plot: Overall shape of trajectory & pattern of recovery*
 
 Plot individuals with high/low PC2 overall scores. 
-```{r plot_highPC2}
+```{r plot_highPC2, eval = F}
 right_scores <- right_0.fpca$scores
 q.95 <- quantile(right_scores[, 2], p = 0.95)
 
@@ -685,7 +685,7 @@ for(i in 1:nrow(highPC2.df)){
 }
 ```
 
-```{r lowPC2Scores}
+```{r lowPC2Scores, eval = F}
 q.05 <- quantile(right_scores[, 2], p = 0.05)
 
 lowPC2 <- rownames(right_scores)[right_scores[, 2] < q.05]
@@ -1117,7 +1117,7 @@ pt.wi.scores$smoker <- ifelse(pt.wi.scores$user_cat %in% c("daily", "occasional"
 ```
 
 
-```{r explore_PC1}
+```{r explore_PC1, eval = F}
 # pc_ind_plots <- function(scores.df, raw.df, pc_plot.df, q, pc= "PC1", id = "subject_id", pc.val = 1, pc_plot.var = "wiPctChg", raw.plot.var = "percent_change"){
 #   q.pc <- quantile(scores.df[, pc], probs = q)
 #   q.ids <- scores.df[scores.df[, pc] > q.pc, id]
@@ -1207,7 +1207,7 @@ for(i in pctile05.wi){
 ```
 
 
-```{r explore_PC2}
+```{r explore_PC2, eval = F}
 
 q.95 <- quantile(wi.scores$PC2, probs = 0.95)
 
@@ -1263,7 +1263,7 @@ for(i in pctile05.wi){
 
 ```
 
-```{r fpca_wi_pc3}
+```{r fpca_wi_pc3, eval = F}
 q.95 <- quantile(wi.scores$PC3, probs = 0.95)
 
 pctile95.wi <- wi.scores$subject_id[wi.scores$PC3 > q.95] 
@@ -1319,7 +1319,7 @@ for(i in pctile05.wi){
 
 # Meeting 20220908
 
-```{r bumpy_curves}
+```{r bumpy_curves, eval = F}
 ### INVESTIGATE BUMPS IN MEAN Function
 
 ## Pre/Post Across subjects
@@ -1430,6 +1430,7 @@ m5.scalar <- glm(smoker ~ min_constriction_chg + AUC_chg + slope_chg, family = "
 pt.wi.scores$pred_wi_scalar <- predict(m5.scalar, pt.wi.scores)
 pt.wi.scalar.roc2 <- roc(response = pt.wi.scores$smoker, 
                      predictor = pt.wi.scores$pred_wi_scalar)
+wpd_auc$wpd_SF_aucScores <- pt.wi.scalar.roc2$original.predictor
 # pt.wi.scalar.roc2
 wi.auc.scalars <- pt.wi.scalar.roc2$auc
 auc.df <- rbind(auc.df, c("W/I Diff AUC Scalar Feat", wi.auc.scalars))
@@ -1442,6 +1443,44 @@ legend(0.5, 0.35, legend = c(paste0("post PCs AUC: ",round(post.auc.pc4, 3)),
                                  paste0("WPD Scalar Features AUC: ", round(wi.auc.scalars, 3))),
        col = c("black", "darkred", "darkblue", "darkgreen"), 
        lty = rep(1, 4), cex = 0.8, bty="n")
+
+auc_inference <- merge(auc_inference, wpd_auc, 
+                       by = c("subject_id", "smoker"))
+```
+
+AUC Inference
+```{r auc_sig}
+
+pos_class <- auc_inference[auc_inference$smoker == 1, ]
+neg_class <- auc_inference[auc_inference$smoker == 0, ]
+
+Vr_10 <- function(nN, srpi, srnj){
+  Vr_10i <- vector(mode = "numeric", length = length(srpi))
+  
+  for(i in 1:length(srpi)){
+    Vr_10i[i] = (1/nN)*(sum(srpi[i] > srnj)+ 0.5*sum(srpi[i] ==  srnj))
+  }
+  
+  return(Vr_10i)
+}
+
+Vr_01 <- function(pN, srpi, srnj){
+  Vr_01i <- vector(mode = "numeric", length = length(srnj))
+  
+  for(i in 1:length(srnj)){
+    Vr_01i[i] = (1/pN)*(sum(srnj[i] < srpi)+ 0.5*sum(srnj[i] ==  srpi))
+  }
+  
+  return(Vr_01i)
+}
+
+V_postPC_10 <- Vr_10(nN= sum(auc_inference$smoker == 0), 
+              srpi = auc_inference$post_PC_aucScores[auc_inference$smoker == 1], 
+              srnj = auc_inference$post_PC_aucScores[auc_inference$smoker == 0])
+
+V_postPC_01<- Vr_01(pN= sum(auc_inference$smoker == 1), 
+              srpi = auc_inference$post_PC_aucScores[auc_inference$smoker == 1], 
+              srnj = auc_inference$post_PC_aucScores[auc_inference$smoker == 0])
 
 ```
 
