@@ -141,6 +141,8 @@ library(haven)
 data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data" # Work laptop
 # data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data"
 ps_folder <- "202208_PupilLightReflex"
+
+res_folder <- "C:/Repository/FDA/PupilLightReflex/analysis"
 ```
 
 # Data Preparation
@@ -461,11 +463,14 @@ ggplot(right.df, aes(x=frame, y = pupil_size, group = subject_id))+
   labs(title ="Pupil Size by Pre/Post and THC use category")+
   theme_bw()
 
+jpeg(file.path(res_folder, "PrePost_Right_PercentChange.jpg"), 
+     height = 6, width = 8, res = 300, units = "in")
 ggplot(right.df, aes(x=frame, y = percent_change, group = subject_id))+
   geom_line(show.legend = FALSE, alpha = 0.5)+
   facet_grid(rows = vars(user_cat), cols = vars(tp))+
   labs(title = "Percent Change by Pre/Post and THC use category")+
   theme_bw()
+dev.off()
 ```
 
 Plots of Left and Right Eye for "POST" data. One pt has negative values for pupil size.
@@ -480,11 +485,14 @@ ggplot(post.df, aes(x=frame, y = percent_change, group = subject_id))+
 
 pre.df <- ps[ps$tp == "pre2", ] 
 
+jpeg(file.path(res_folder, "LeftRight_Pre_PercentChange.jpg"), 
+     height = 6, width = 8, res = 300, units = "in")
 ggplot(pre.df, aes(x=frame, y = percent_change, group = subject_id))+
   geom_line(show.legend = FALSE, alpha = 0.5)+
   facet_grid(rows = vars(user_cat), cols = vars(eye))+
   labs(title = "Percent Change by Eye and THC use category - Pre")+
   theme_bw()
+dev.off()
 ```
 
 
@@ -650,14 +658,17 @@ grid.arrange(plot_pc1+theme(legend.position = "none"),
              widths = c(10, 10, 10, 3),
              nrow = 2, ncol = 4)
 
-# grid.arrange(plot_pc1+theme(legend.position = "none"), 
-#              plot_pc2+theme(legend.position = "none"), 
-#              plot_pc3+theme(legend.position = "none"), 
-#              plot_pc4+theme(legend.position = "none"),
-#              legend_postPC,
-#              layout_matrix = rbind(c(1,2,5), c(3,4,5)),
-#              widths = c(10, 10, 3),
-#              nrow = 2, ncol = 3)
+jpeg(file.path(res_folder, "Post_PC4.jpg"), 
+     height = 6, width = 8, res = 300, units = "in")
+grid.arrange(plot_pc1+theme(legend.position = "none"),
+             plot_pc2+theme(legend.position = "none"),
+             plot_pc3+theme(legend.position = "none"),
+             plot_pc4+theme(legend.position = "none"),
+             legend_postPC,
+             layout_matrix = rbind(c(1,2,5), c(3,4,5)),
+             widths = c(10, 10, 3),
+             nrow = 2, ncol = 3)
+dev.off()
 
 ```
 
@@ -884,8 +895,10 @@ wi.user <- ggplot(right_0.pt, aes(x=frame, y = wiPctChg, group = subject_id))+
            facet_grid(rows = vars(user_cat))+
            labs(title ="Within subject difference in percent change by THC use category")+
            theme_bw()
-
+jpeg(file.path(res_folder, "Post_WPD_Trajectories.jpg"), 
+     height = 5, width = 12, res = 300, units = "in")
 grid.arrange(post.user, wi.user, nrow = 1)
+dev.off()
 ```
 *Non-user plot seems "centered" around 0 but still showing heterogeneity. Lots of heterogeneity across user-groups, but a mostly positive difference.*
 
@@ -1098,6 +1111,19 @@ grid.arrange(wi.plot_pc1+theme(legend.position = "none"),
              layout_matrix = rbind(c(1,2,3, 7), c(4, 5, 6, 7)),
              widths = c(10, 10, 10, 3),
              nrow = 2, ncol = 4)
+
+jpeg(file.path(res_folder, "WPD_PC4.jpg"), 
+     height = 6, width = 8, res = 300, units = "in")
+grid.arrange(wi.plot_pc1+theme(legend.position = "none"), 
+             wi.plot_pc2+theme(legend.position = "none"), 
+             wi.plot_pc3+theme(legend.position = "none"), 
+             wi.plot_pc4+theme(legend.position = "none"),
+             legend_wiPC,
+             layout_matrix = rbind(c(1,2,5), c(3,4,5)),
+             widths = c(10, 10, 3),
+             nrow = 2, ncol = 3)
+dev.off()
+
 ```
 
 PC1: Individuals with high scores on PC1 have a weaker minimal constriction at post compared to pre. Individuals with low scores on PC1 have a stronger minimal constriction at post compared to pre.
@@ -1398,7 +1424,7 @@ pt.scores$pred <- predict(m1.scalar, pt.scores)
 pt.scalar.roc <- roc(response = pt.scores$smoker, predictor = pt.scores$pred)
 # pt.scalar.roc
 post.auc.scalar <- pt.scalar.roc$auc
-plot.roc(pt.scalar.roc, main = "", add = T, col = "darkred")
+
 
 auc_inference$post_SF_aucScores <- pt.scalar.roc$original.predictor
 
@@ -1417,10 +1443,6 @@ pt.wi.scores.roc2 <- roc(response = pt.wi.scores$smoker,
 wi.auc.pcs <- pt.wi.scores.roc2$auc
 auc.df <- rbind(auc.df, c("W/I Diff AUC PCS", wi.auc.pcs))
 
-plot.roc(pt.wi.scores.roc2, 
-         col = "darkblue", 
-         add = T)
-
 wpd_auc <- pt.wi.scores[, c("subject_id", "smoker")]
 wpd_auc$wpd_PC_aucScores <- pt.wi.scores.roc2$original.predictor
 
@@ -1434,6 +1456,15 @@ wpd_auc$wpd_SF_aucScores <- pt.wi.scalar.roc2$original.predictor
 # pt.wi.scalar.roc2
 wi.auc.scalars <- pt.wi.scalar.roc2$auc
 auc.df <- rbind(auc.df, c("W/I Diff AUC Scalar Feat", wi.auc.scalars))
+
+jpeg(file.path(res_folder, "AUC_4PC_ScalarFeatures.jpg"), 
+     height = 6, width = 8, res = 300, units = "in")
+plot.roc(pt.scores.roc, main = "Prediction of Smoker by PCs and Scalar Features in Post and WPD")
+plot.roc(pt.scalar.roc, main = "", add = T, col = "darkred")
+plot.roc(pt.wi.scores.roc2, 
+         col = "darkblue", 
+         add = T)
+
 plot.roc(pt.wi.scalar.roc2, 
          col = "darkgreen",
          add = T)
@@ -1443,6 +1474,7 @@ legend(0.5, 0.35, legend = c(paste0("post PCs AUC: ",round(post.auc.pc4, 3)),
                                  paste0("WPD Scalar Features AUC: ", round(wi.auc.scalars, 3))),
        col = c("black", "darkred", "darkblue", "darkgreen"), 
        lty = rep(1, 4), cex = 0.8, bty="n")
+dev.off()
 
 auc_inference <- merge(auc_inference, wpd_auc, 
                        by = c("subject_id", "smoker"))
@@ -2309,7 +2341,10 @@ wi_userTraj <- grid.arrange(arrangeGrob(wi_userProfile+theme(legend.position = "
 
 ### Plotting average trajectories of users
 ```{r wpd_traj, echo = F,  fig.height= 6, fig.width=20}
+jpeg(file.path(res_folder, "FoSR_Mean_Trajectories_post_WPD.jpg"), 
+     height = 6, width = 20, res = 300, units = "in")
 grid.arrange(post_userTraj, wi_userTraj, ncol = 2)
+dev.off()
 ```
 
 
@@ -2375,7 +2410,10 @@ wi_dly_coef <- grid.arrange(ylab, posval, negval, wi_dly_plt,
 ### Difference between Occasional and Non-user
 
 ```{r occ_coef_plt, echo=FALSE, fig.height = 6, fig.width=15}
+jpeg(file.path(res_folder, "FoSR_Diff_Occ_NU_Trajectories_post_WPD.jpg"), 
+     height = 6, width = 15, res = 300, units = "in")
 grid.arrange(post_occ_coef, wi_occ_coef, ncol = 2)
+dev.off()
 ```
 
 This plot compares the difference between occasional and non-users for post and WPD data. In the post data there is significant positive difference in the occasional and non-users from frame 50 - 125 which would indicate that occasional user have less constriction during this time. In the WPD data there is a significant positive difference in the occasional and non-users from frame 10 - 175, indicating a greater difference in the difference between post and pre for the occasional vs non-user. Since the typical response has a positive difference between post and pre during this interval caused by less constriction at post compared to pre, we can say that there is even less constriction in post data of an occasional user compared to his/her pre than in a non-user. 
@@ -2383,7 +2421,10 @@ This plot compares the difference between occasional and non-users for post and 
 ### Difference between Daily and Non-Users
 
 ```{r dly_coef_plt, echo=FALSE, fig.height = 6, fig.width=15}
+jpeg(file.path(res_folder, "FoSR_Diff_Dly_NU_Trajectories_post_WPD.jpg"), 
+     height = 6, width = 15, res = 300, units = "in")
 grid.arrange(post_dly_coef, wi_dly_coef, ncol = 2)
+dev.off()
 ```
 
 These results are similar to the occassional vs non-user but less pronounced maybe indicating more variability in daily and non-users. 
@@ -2425,7 +2466,10 @@ wi_dlyocc_coef <- grid.arrange(ylab, posval, negval, wi_dlyocc_plt,
 ### Difference between Daily and Occasional Users
 
 ```{r dlyocc_coef_plt, echo = F, fig.height = 6, fig.width=15}
+jpeg(file.path(res_folder, "FoSR_Diff_Dly_Occ_Trajectories_post_WPD.jpg"), 
+     height = 6, width = 15, res = 300, units = "in")
 grid.arrange(post_dlyocc_coef, wi_dlyocc_coef, ncol = 2)
+dev.off()
 ```
 
 
@@ -2527,7 +2571,7 @@ wi_smkProfile <- ggplot(data = pred_df, aes(x = frame, y = mean, group = user, c
                    labs(y = "Within Person Difference in Percent Change")+
                    theme_bw()
 
-legend_smkProfile <- g_legend(wi_userProfile)
+legend_smkProfile <- g_legend(wi_smkProfile)
 
 wi_smkProfile.se <- ggplot(data = pred_df, aes(x = frame, y = mean, group = user, col = user))+
                       geom_line()+
@@ -2546,7 +2590,10 @@ wi_smk <- grid.arrange(arrangeGrob(wi_smkProfile+theme(legend.position = "none")
 
 ### Average Trajectory of Smoker vs Non-Smoker
 ```{r plt_smkTraj,echo = F, fig.height= 8, fig.width= 8}
+jpeg(file.path(res_folder, "FoSR_Smk_Mean_Trajectories_post_WPD.jpg"), 
+     height = 8, width = 15, res = 300, units = "in")
 grid.arrange(post_smk, wi_smk, nrow = 2)
+dev.off()
 ```
 
 ```{r wi_smk_coef_effect_plots}
@@ -2594,5 +2641,51 @@ wi_smk_coef <- grid.arrange(ylab, posval, negval, wi_smk_plt,
 
 ### Smoker vs Non-smoker Effect
 ```{r smokerEffects, echo = F, fig.height = 4, fig.width=15}
+jpeg(file.path(res_folder, "FoSR_Diff_Smk_Trajectories_post_WPD.jpg"), 
+     height = 6, width = 15, res = 300, units = "in")
 grid.arrange(post_smk_coef , wi_smk_coef, nrow = 1)
+dev.off()
+```
+
+## Correlation between left and & right eyes
+```{r eyeCorr}
+right.names <- names(right_0.post.w)
+right.names <- c(right.names[1:3], paste0("R_", right.names[4:length(right.names)]))
+names(right_0.post.w) <- right.names
+
+left.names <- names(left_0.post.w)
+left.names <- c(left.names[1:3], paste0("L_", left.names[4:length(left.names)]))
+names(left_0.post.w) <- left.names
+
+
+botheyes <- merge(right_0.post.w, left_0.post.w, 
+                  by = c("subject_id", "tp", "user_cat"))
+
+right.corr.names <- right.names[4:length(right.names)]
+left.corr.names <- left.names[4:length(left.names)]
+
+botheye.corr <- round(cor(botheyes[, right.corr.names[-1]], 
+                          botheyes[, left.corr.names[-1]], use = "pairwise.complete.obs"), 3)
+
+get_upper_tri <- function(cormat){
+    cormat[lower.tri(cormat)]<- NA
+    return(cormat)
+}
+
+upper_tri <- get_upper_tri(botheye.corr)
+
+library(reshape2)
+
+melted_cor_mat <- melt(botheye.corr)
+names(melted_cor_mat) <- c("RightEye", "LeftEye", "value")
+
+ggplot(data = melted_cor_mat, aes(RightEye, LeftEye, fill = value))+
+ geom_tile()+
+ scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+   midpoint = 0, limit = c(-0.2,1), space = "Lab", 
+   name="Pearson\nCorrelation") +
+  theme_bw()+ 
+ theme(axis.text.x = element_blank(),
+       axis.text.y = element_blank())+
+ coord_fixed()
 ```

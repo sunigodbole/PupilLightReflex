@@ -1,0 +1,46 @@
+---
+title: "FoSR"
+author: "SG"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+## Function on Scalar Regression
+### Post
+$$ 
+\begin{aligned}
+Y_{ij}(t) &= f_0(t) + f_1(t)*I(user = occasional) + f_2(t)*I(user = daily) + b_i(t) + \epsilon_i(t)\\
+& b_i(t) \sim GP(0, \Sigma_b) \\
+& \epsilon_i(t) \sim N(0, \sigma_{\epsilon}^2) \\
+&= \sum_{k=1}^K \xi_{0k}\phi_{0k}(t_i) + \sum_{k=1}^K \xi_{1k}\phi_{1k}(t_i)*I(user = occasional) + \sum_{k=1}^K \xi_{2k}\phi_{2k}(t_i)*I(user = daily) + \sum_{k=1}^K \xi_{ik}\phi_k(t_i) + \epsilon_i(t)\\
+\end{aligned}
+$$
+
+### Mean function for non-user
+$$
+\begin{aligned}
+Y_{ij}(t) &= f_0(t)\\
+&=\sum_{k=1}^K \xi_{0k}\phi_{0k}(t_i) \\
+&= \Phi_0\xi_0
+\end{aligned}
+$$
+
+### Mean function for occasional user
+$$
+\begin{aligned}
+Y_{ij}(t) &= f_0(t) + f_1(t) \\  
+&=\sum_{k=1}^K \xi_{0k}\phi_{0k}(t_i) + \sum_{k=1}^K \xi_{1k}\phi_{1k}(t_i)\\
+&= \Phi_0\xi_0 + \Phi_1\xi_1\\ 
+&= [ \Phi_0, \Phi_1 ] \xi
+\end{aligned}
+$$
+
+### Mean function for daily user
+$$
+\begin{aligned}
+Y_{ij}(t) &= f_0(t) + f_2(t) \\  
+&=\sum_{k=1}^K \xi_{0k}\phi_{0k}(t_i) + \sum_{k=1}^K \xi_{2k}\phi_{2k}(t_i) \\
+&= \Phi_0\xi_0 + \Phi_2\xi_2\\
+&= [ \Phi_0, \Phi_2 ] \xi
+\end{aligned}
+$$
