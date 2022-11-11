@@ -262,12 +262,25 @@ testTimes$post_safetyscan_time_convert <- as.POSIXct(paste0(testTimes$pre_safety
 testTimes$postConsumpTimeToTest <- as.numeric(difftime(testTimes$post_safetyscan_time_convert,
                                                        testTimes$consump_end_time_convert,
                                                        units = "mins"))
+
+testTimes$Post_PreTime <- as.numeric(difftime(testTimes$post_safetyscan_time_convert,
+                                              testTimes$pre_safetyscan_time_convert,
+                                              units = "mins"))
+
 testTimes$remove <- ifelse(testTimes$subject_id == "001-056" & is.na(testTimes$postConsumpTimeToTest), 1, 0)
 testTimes <- testTimes[testTimes$remove == 0, ]
 
-pt.df <- merge(pt.df.w, testTimes[, c("subject_id", "postConsumpTimeToTest")], 
+# ## For subjects without a post Consumption to test time, we're using the time between pre and post test -- DO NOT "impute" this way -- JW 11/11/2022
+# testTimes$postConsumpTimeToTest[is.na(testTimes$postConsumpTimeToTest)] <- testTimes$Post_PreTime[is.na(testTimes$postConsumpTimeToTest)]
+
+pt.df <- merge(pt.df.w, testTimes[, c("subject_id", "postConsumpTimeToTest", "Post_PreTime")], 
                by = "subject_id")
-ps <- merge(ps, testTimes[, c("subject_id", "postConsumpTimeToTest")], 
+
+by(pt.df$postConsumpTimeToTest, INDICES = list(pt.df$user_cat), summary)
+
+plot(pt.df$Post_PreTime, pt.df$postConsumpTimeToTest)
+
+ps <- merge(ps, testTimes[, c("subject_id", "postConsumpTimeToTest", "Post_PreTime")], 
                by = "subject_id")
 
 non_user.id <- pt.df$subject_id[pt.df$user_cat == "non-user"]
@@ -315,7 +328,7 @@ ps <- merge(ps, vas.w,
 No Consumption end time recorded for non-users
 ```{r tab1}
 # Demographics Table by User Category
-table1(~ demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg + vas|user_cat, 
+table1(~ demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + Post_PreTime + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg + vas|user_cat, 
        data = pt.df)
 ```
 
@@ -495,8 +508,6 @@ ggplot(pre.df, aes(x=frame, y = percent_change, group = subject_id))+
 # dev.off()
 ```
 
-
-
 # Exploratory Analysis
 
 ## Over all subjects and timepoints
@@ -671,6 +682,7 @@ grid.arrange(plot_pc1+theme(legend.position = "none"),
 # dev.off()
 
 ```
+
 
 *PC1 plot: Individuals with low loading on PC1 (-2SD) have less constriction than the average and individuals with a high loading (+2SD) have more constriction. Rebound effect? *
 
@@ -871,7 +883,7 @@ row.names(right_0.pt.w) <- right_0.pt.w$subject_id
 No Consumption end time recorded for non-users
 ```{r tab1_analyticN}
 # Demographics Table by User Category
-table1(~demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg +vas|user_cat, 
+table1(~demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + Post_PreTime + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg +vas|user_cat, 
        data = pt.df[pt.df$subject_id %in% analytic.N, ])
 ```
 
@@ -1456,6 +1468,8 @@ wpd_auc$wpd_SF_aucScores <- pt.wi.scalar.roc2$original.predictor
 # pt.wi.scalar.roc2
 wi.auc.scalars <- pt.wi.scalar.roc2$auc
 auc.df <- rbind(auc.df, c("W/I Diff AUC Scalar Feat", wi.auc.scalars))
+auc.df$AUC <- as.numeric(auc.df$AUC)
+
 
 jpeg(file.path(res_folder, "AUC_4PC_ScalarFeatures.jpg"), 
      height = 6, width = 8, res = 300, units = "in")
@@ -1480,11 +1494,16 @@ auc_inference <- merge(auc_inference, wpd_auc,
                        by = c("subject_id", "smoker"))
 ```
 
+## Compare AUC across models
+```{r compare_auc}
+auc.df$AUC <- round(as.numeric(auc.df$AUC), 3)
+
+knitr::kable(auc.df)
+```
+
+
 AUC Inference
 ```{r auc_sig}
-
-pos_class <- auc_inference[auc_inference$smoker == 1, ]
-neg_class <- auc_inference[auc_inference$smoker == 0, ]
 
 Vr_10 <- function(nN, srpi, srnj){
   Vr_10i <- vector(mode = "numeric", length = length(srpi))
@@ -1506,22 +1525,186 @@ Vr_01 <- function(pN, srpi, srnj){
   return(Vr_01i)
 }
 
-V_postPC_10 <- Vr_10(nN= sum(auc_inference$smoker == 0), 
-              srpi = auc_inference$post_PC_aucScores[auc_inference$smoker == 1], 
-              srnj = auc_inference$post_PC_aucScores[auc_inference$smoker == 0])
+w10 <- function(nP, v10_r, auc_r, v10_s, auc_s){
+  diff_r <- vector(mode = "numeric", length = length(v10_r))
+  diff_s <- vector(mode = "numeric", length = length(v10_s))
+  
+  for(i in 1:length(v10_r)){
+    diff_r[i] <- v10_r[i] - auc_r
+    diff_s[i] <- v10_s[i] - auc_r
+  }
+  
+  res <- (nP-1)^(-1)* sum(diff_r * diff_s)
+  
+  return(res)
+}
 
-V_postPC_01<- Vr_01(pN= sum(auc_inference$smoker == 1), 
-              srpi = auc_inference$post_PC_aucScores[auc_inference$smoker == 1], 
-              srnj = auc_inference$post_PC_aucScores[auc_inference$smoker == 0])
+w01 <- function(nN, v01_r, auc_r, v01_s, auc_s){
+  diff_r <- vector(mode = "numeric", length = length(v01_r))
+  diff_s <- vector(mode = "numeric", length = length(v01_s))
+  
+  for(i in 1:length(v01_r)){
+    diff_r[i] <- v01_r[i] - auc_r
+    diff_s[i] <- v01_s[i] - auc_r
+  }
+  res <- (nN-1)^(-1)* sum(diff_r * diff_s)
+  return(res)
+}
 
+w10_postPC_postSF <- w10(nP = sum(auc_inference$smoker == 1), 
+                         v10_r = V_postPC_10,
+                         auc_r = auc.df$AUC[auc.df$Label == "Post AUC PCs"], 
+                         v10_s = V_postSF_10,
+                         auc_s = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"])
+
+w01_postPC_postSF <- w01(nN = sum(auc_inference$smoker == 0), 
+                         v01_r = V_postPC_01,
+                         auc_r = auc.df$AUC[auc.df$Label == "Post AUC PCs"], 
+                         v01_s = V_postSF_01,
+                         auc_s = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"])
+                         
+
+w_rs <- function(nP, nN, srpi_r, srnj_r, srpi_s, srnj_s, auc_r, auc_s){
+  v10_r <-  Vr_10(nN, srpi_r, srnj_r)
+  v01_r <-  Vr_01(pN=nP, srpi_r, srnj_r)
+  
+  v10_s <-  Vr_10(nN, srpi_s, srnj_s)
+  v01_s <-  Vr_01(pN=nP, srpi_s, srnj_s)
+  
+  w10_rs <- w10(nP, v10_r, auc_r, v10_s, auc_s)
+  w01_rs <- w01(nN, v01_r, auc_r, v01_s, auc_s)
+  
+  
+  res <-  (nP)^(-1)*w10_rs + (nN)^(-1)*w01_rs
+  return(res)
+}
+
+w_postPC_postPC <- w_rs(nP = sum(auc_inference$smoker == 1),
+                        nN = sum(auc_inference$smoker == 0), 
+                        srpi_r = auc_inference$post_PC_aucScores[auc_inference$smoker == 1],
+                        srnj_r = auc_inference$post_PC_aucScores[auc_inference$smoker == 0],
+                        srpi_s = auc_inference$post_PC_aucScores[auc_inference$smoker == 1],
+                        srnj_s = auc_inference$post_PC_aucScores[auc_inference$smoker == 0],
+                        auc_r = auc.df$AUC[auc.df$Label == "Post AUC PCs"],
+                        auc_s = auc.df$AUC[auc.df$Label == "Post AUC PCs"])
+
+w_postSF_postSF <- w_rs(nP = sum(auc_inference$smoker == 1),
+                        nN = sum(auc_inference$smoker == 0), 
+                        srpi_r = auc_inference$post_SF_aucScores[auc_inference$smoker == 1],
+                        srnj_r = auc_inference$post_SF_aucScores[auc_inference$smoker == 0],
+                        srpi_s = auc_inference$post_SF_aucScores[auc_inference$smoker == 1],
+                        srnj_s = auc_inference$post_SF_aucScores[auc_inference$smoker == 0],
+                        auc_r = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"],
+                        auc_s = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"])
+
+w_wpdPC_wpdPC <- w_rs(nP = sum(auc_inference$smoker == 1),
+                        nN = sum(auc_inference$smoker == 0), 
+                        srpi_r = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 1],
+                        srnj_r = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 0],
+                        srpi_s = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 1],
+                        srnj_s = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 0],
+                        auc_r = auc.df$AUC[auc.df$Label == "W/I Diff AUC PCS"],
+                        auc_s = auc.df$AUC[auc.df$Label == "W/I Diff AUC PCS"])
+
+w_wpdSF_wpdSF <- w_rs(nP = sum(auc_inference$smoker == 1),
+                        nN = sum(auc_inference$smoker == 0), 
+                        srpi_r = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 1],
+                        srnj_r = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 0],
+                        srpi_s = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 1],
+                        srnj_s = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 0],
+                        auc_r = auc.df$AUC[auc.df$Label == "W/I Diff AUC Scalar Feat"],
+                        auc_s = auc.df$AUC[auc.df$Label == "W/I Diff AUC Scalar Feat"])
+
+w_postPC_postSF <- w_rs(nP = sum(auc_inference$smoker == 1),
+                        nN = sum(auc_inference$smoker == 0), 
+                        srpi_r = auc_inference$post_PC_aucScores[auc_inference$smoker == 1],
+                        srnj_r = auc_inference$post_PC_aucScores[auc_inference$smoker == 0],
+                        srpi_s = auc_inference$post_SF_aucScores[auc_inference$smoker == 1],
+                        srnj_s = auc_inference$post_SF_aucScores[auc_inference$smoker == 0],
+                        auc_r = auc.df$AUC[auc.df$Label == "Post AUC PCs"],
+                        auc_s = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"])
+
+w_postPC_wpdPC <- w_rs(nP = sum(auc_inference$smoker == 1),
+                        nN = sum(auc_inference$smoker == 0), 
+                        srpi_r = auc_inference$post_PC_aucScores[auc_inference$smoker == 1],
+                        srnj_r = auc_inference$post_PC_aucScores[auc_inference$smoker == 0],
+                        srpi_s = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 1],
+                        srnj_s = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 0],
+                        auc_r = auc.df$AUC[auc.df$Label == "Post AUC PCs"],
+                        auc_s = auc.df$AUC[auc.df$Label == "W/I Diff AUC PCS"])
+
+w_postPC_wpdSF <- w_rs(nP = sum(auc_inference$smoker == 1),
+                        nN = sum(auc_inference$smoker == 0), 
+                        srpi_r = auc_inference$post_PC_aucScores[auc_inference$smoker == 1],
+                        srnj_r = auc_inference$post_PC_aucScores[auc_inference$smoker == 0],
+                        srpi_s = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 1],
+                        srnj_s = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 0],
+                        auc_r = auc.df$AUC[auc.df$Label == "Post AUC PCs"],
+                        auc_s = auc.df$AUC[auc.df$Label == "W/I Diff AUC Scalar Feat"])
+
+w_postSF_wpdPC <- w_rs(nP = sum(auc_inference$smoker == 1),
+                        nN = sum(auc_inference$smoker == 0), 
+                        srpi_r = auc_inference$post_SF_aucScores[auc_inference$smoker == 1],
+                        srnj_r = auc_inference$post_SF_aucScores[auc_inference$smoker == 0],
+                        srpi_s = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 1],
+                        srnj_s = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 0],
+                        auc_r = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"],
+                        auc_s = auc.df$AUC[auc.df$Label == "W/I Diff AUC PCS"])
+
+w_postSF_wpdSF <- w_rs(nP = sum(auc_inference$smoker == 1),
+                        nN = sum(auc_inference$smoker == 0), 
+                        srpi_r = auc_inference$post_SF_aucScores[auc_inference$smoker == 1],
+                        srnj_r = auc_inference$post_SF_aucScores[auc_inference$smoker == 0],
+                        srpi_s = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 1],
+                        srnj_s = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 0],
+                        auc_r = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"],
+                        auc_s = auc.df$AUC[auc.df$Label == "W/I Diff AUC Scalar Feat"])
+
+w_wpdPC_wpdSF <- w_rs(nP = sum(auc_inference$smoker == 1),
+                        nN = sum(auc_inference$smoker == 0), 
+                        srpi_r = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 1],
+                        srnj_r = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 0],
+                        srpi_s = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 1],
+                        srnj_s = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 0],
+                        auc_r = auc.df$AUC[auc.df$Label == "W/I Diff AUC PCS"],
+                        auc_s = auc.df$AUC[auc.df$Label == "W/I Diff AUC Scalar Feat"])
+
+z_postPC_postSF <- (auc.df$AUC[auc.df$Label == "Post AUC PCs"] - auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"])/
+  (sqrt(w_postPC_postPC +  w_postSF_postSF - w_postPC_postSF))
+
+z_postPC_wpdPC <- (auc.df$AUC[auc.df$Label == "Post AUC PCs"] - auc.df$AUC[auc.df$Label == "W/I Diff AUC PCS"])/
+  (sqrt(w_postPC_postPC +  w_wpdPC_wpdPC - w_postPC_wpdPC))
+
+z_postPC_wpdSF <- (auc.df$AUC[auc.df$Label == "Post AUC PCs"] - auc.df$AUC[auc.df$Label == "W/I Diff AUC Scalar Feat"])/
+  (sqrt(w_postPC_postPC +  w_wpdSF_wpdSF - w_postPC_wpdSF))
+
+z_postSF_wpdPC <- (auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"] - auc.df$AUC[auc.df$Label == "W/I Diff AUC PCS"])/
+  (sqrt(w_postSF_postSF +  w_wpdPC_wpdPC - w_postSF_wpdPC))
+
+z_postSF_wpdSF <- (auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"] - auc.df$AUC[auc.df$Label == "W/I Diff AUC Scalar Feat"])/
+  (sqrt(w_postSF_postSF +  w_wpdSF_wpdSF - w_postSF_wpdSF))
+
+z_wpdPC_wpdSF <- (auc.df$AUC[auc.df$Label == "W/I Diff AUC PCS"] - auc.df$AUC[auc.df$Label == "W/I Diff AUC Scalar Feat"])/
+  (sqrt(w_wpdSF_wpdSF +  w_wpdPC_wpdPC - w_wpdPC_wpdSF))
+
+auc_compare <- data.frame("Test Desciption" = c("AUC-postPC v AUC-postSF", 
+                                                "AUC-postPC v AUC-wpdPC", 
+                                                "AUC-postPC v AUC-wpdSF", 
+                                                "AUC-postSF v AUC-wpdPC",
+                                                "AUC-postSF v AUC-wpdPC", 
+                                                "AUC-wpdPC v AUC-wpdSF"), 
+                          "z" = c(round(z_postPC_postSF, 3), 
+                                  round(z_postPC_wpdPC, 3), 
+                                  round(z_postPC_wpdSF, 3), 
+                                  round(z_postSF_wpdPC, 3), 
+                                  round(z_postSF_wpdSF, 3), 
+                                  round(z_wpdPC_wpdSF, 3)))
+
+auc_compare$p <- round((1-pnorm(abs(auc_compare$z)))*2, 3)
+
+knitr::kable(auc_compare)
 ```
 
-## Compare AUC across models
-```{r compare_auc}
-auc.df$AUC <- round(as.numeric(auc.df$AUC), 3)
-
-knitr::kable(auc.df)
-```
 
 ## Association with Demog Variables
 
@@ -1536,7 +1719,6 @@ pt.wi.scores$male <- ifelse(pt.wi.scores$demo_gender == "Male", 1, 0)
 pt.wi.scores$non_user <- ifelse(pt.wi.scores$user_cat == "non-user", 1, 0)
 pt.wi.scores$daily <- ifelse(pt.wi.scores$user_cat == "daily", 1, 0)
 pt.wi.scores$occasional <- ifelse(pt.wi.scores$user_cat == "occasional", 1, 0)
-
 ```
 
 ### Post Data
@@ -1546,7 +1728,6 @@ Compare PCs to Scalar Features
 chart.Correlation(pt.scores[, c("PC1", "PC2", "PC3", "PC4", 
                                 "min_constriction.post", "duration.post", 
                                 "avg_end_percent.post", "slope.post", "AUC.post")])
-
 ```
 
 Compare PCs to demog Variables
@@ -1599,7 +1780,7 @@ chart.Correlation(pt.wi.scores[, c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6",
 ```
 
 Compare PCs to demog Variables
-```{r wi_corrPC_demog}
+```{r wi_corrPC_demog, warning = F}
 chart.Correlation(pt.wi.scores[, c("PC1", "PC2", "PC3", "PC4", "PC5", "PC6",
                                 "demo_age","male", "thc.post", "thc_chg", "BMI", 
                                 "postConsumpTimeToTest", "smoker", 
@@ -2648,13 +2829,81 @@ grid.arrange(post_smk_coef , wi_smk_coef, nrow = 1)
 ```
 ## Time from consumption to post test
 ```{r timepostconsump}
-summary(pt.df$postConsumpTimeToTest)
-hist(pt.df$postConsumpTimeToTest)
 
-by(pt.df$postConsumpTimeToTest, INDICES = list(pt.df$user_cat), summary)
-by(pt.df$postConsumpTimeToTest, INDICES = list(pt.df$user_cat), sd)
+wi.consump.m <- lm(postConsumpTimeToTest ~ PC1 + PC2 + PC3 + PC4 + PC5 + PC6, data = pt.wi.scores)
+summary(wi.consump.m)
+
+post.consump.m <- lm(postConsumpTimeToTest ~ PC1 + PC2 + PC3 + PC4, data = pt.scores)
+summary(post.consump.m)
+
+pt.analytic.df <-  merge(pt.analytic.df, pt.wi.scores[, c("subject_id", "PC1", "PC2", "PC3", "PC4", "PC5", "PC6")], 
+                         by = "subject_id")
+names(pt.analytic.df)[names(pt.analytic.df) == "PC1"] <- "wpd.PC1"
+names(pt.analytic.df)[names(pt.analytic.df) == "PC2"] <- "wpd.PC2"
+names(pt.analytic.df)[names(pt.analytic.df) == "PC3"] <- "wpd.PC3"
+names(pt.analytic.df)[names(pt.analytic.df) == "PC4"] <- "wpd.PC4"
+names(pt.analytic.df)[names(pt.analytic.df) == "PC5"] <- "wpd.PC5"
+names(pt.analytic.df)[names(pt.analytic.df) == "PC6"] <- "wpd.PC6"
+
+pt.analytic.df <-  merge(pt.analytic.df, pt.scores[, c("subject_id", "PC1", "PC2", "PC3", "PC4")], 
+                         by = "subject_id")
+names(pt.analytic.df)[names(pt.analytic.df) == "PC1"] <- "post.PC1"
+names(pt.analytic.df)[names(pt.analytic.df) == "PC2"] <- "post.PC2"
+names(pt.analytic.df)[names(pt.analytic.df) == "PC3"] <- "post.PC3"
+names(pt.analytic.df)[names(pt.analytic.df) == "PC4"] <- "post.PC4"
 
 
+table1(~ postConsumpTimeToTest + Post_PreTime|user_cat, 
+       data = pt.analytic.df)
+
+by(pt.analytic.df$postConsumpTimeToTest, INDICES = list(pt.analytic.df$user_cat), summary)
+
+postConsump.cor <- cor(pt.analytic.df$postConsumpTimeToTest, pt.analytic.df[, c("demo_age", "demo_weight", "demo_height", "BMI",
+                                                             "thc.post", "min_constriction.post", "slope.post", "AUC.post",
+                                                             "thc_chg", "min_constriction_chg", "AUC_chg",
+                                                             "wpd.PC1", "wpd.PC2", "wpd.PC3", "wpd.PC4", "wpd.PC5", "wpd.PC6", 
+                                                             "post.PC1", "post.PC2", "post.PC3", "post.PC4",
+                                                             "vas", "Post_PreTime")], use = "pairwise.complete.obs")
+
+postConsump.rcorr <- rcorr(as.matrix(pt.analytic.df[, c("postConsumpTimeToTest", "demo_age", "demo_weight", "demo_height", "BMI",
+                                                        "thc.post", "min_constriction.post", "slope.post", "AUC.post",
+                                                        "thc_chg", "min_constriction_chg", "AUC_chg",
+                                                        "wpd.PC1", "wpd.PC2", "wpd.PC3", "wpd.PC4", "wpd.PC5", "wpd.PC6", 
+                                                        "post.PC1", "post.PC2", "post.PC3", "post.PC4",
+                                                        "vas", "Post_PreTime")]))
+
+postConsump.cor.df <- data.frame(postConsump_rho = postConsump.rcorr$r[, 1], 
+                                 postConsump_p = postConsump.rcorr$P[, 1], 
+                                 postConsump_n = postConsump.rcorr$n[, 1])
+postConsump.cor.df <- postConsump.cor.df[order(-1*abs(postConsump.cor.df$postConsump_rho)), ]
+postConsump.cor.df <- postConsump.cor.df[-1, ]
+rm(postConsump.rcorr)
+
+knitr::kable(postConsump.cor.df)
+
+ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = user_cat, y = postConsumpTimeToTest, col = user_cat))+
+  geom_boxplot()+
+  theme_bw()
+
+ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = demo_gender, y = postConsumpTimeToTest, col = demo_gender))+
+  geom_boxplot()+
+  theme_bw()
+
+ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = postConsumpTimeToTest, y = Post_PreTime, col = user_cat))+
+  geom_point()+
+  theme_bw()
+
+ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = postConsumpTimeToTest, y = min_constriction.post, col = user_cat))+
+  geom_point()+
+  theme_bw()
+
+ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = postConsumpTimeToTest, y = post.PC2, col = user_cat))+
+  geom_point()+
+  theme_bw()
+
+ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = postConsumpTimeToTest, y = wpd.PC3, col = user_cat))+
+  geom_point()+
+  theme_bw()
 
 ```
 
