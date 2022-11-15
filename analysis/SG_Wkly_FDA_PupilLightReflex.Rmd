@@ -452,17 +452,19 @@ Plot of Pupil Size and Percent Change for "PRE" data by Eye and User Category
 ```{r pre_plots}
 pre.df <- ps[ps$tp == "pre2", ] 
 
-ggplot(pre.df, aes(x=frame, y = pupil_size, group = subject_id))+
+ggplot(pre.df, aes(x=frame/30, y = pupil_size, group = subject_id))+
   geom_line(alpha = 0.5, show.legend = FALSE)+
   facet_grid(rows = vars(user_cat), cols = vars(eye))+
-  labs(title ="Pupil Size by Eye and THC use category")+
+  labs(title ="Pupil Size by Eye and THC use category", 
+       x = "seconds")+
   theme_bw()
 
 
-ggplot(pre.df, aes(x=frame, y = percent_change, group = subject_id))+
+ggplot(pre.df, aes(x=frame/30, y = percent_change, group = subject_id))+
   geom_line(alpha = 0.5, show.legend = FALSE)+
   facet_grid(rows = vars(user_cat), cols = vars(eye))+
-  labs(title = "Percent Change by Eye and THC use category")+
+  labs(title = "Percent Change by Eye and THC use category", 
+       x = "seconds")+
   theme_bw()
 ```
 
@@ -470,40 +472,44 @@ Plot of PRE/POST for Right Eye
 ```{r rightEye_plots}
 right.df <- ps[ps$eye == "Right", ]
 
-ggplot(right.df, aes(x=frame, y = pupil_size, group = subject_id))+
+ggplot(right.df, aes(x=frame/30, y = pupil_size, group = subject_id))+
   geom_line(show.legend = FALSE, alpha = 0.5)+
   facet_grid(rows = vars(user_cat), cols = vars(tp))+
-  labs(title ="Pupil Size by Pre/Post and THC use category")+
+  labs(title ="Pupil Size by Pre/Post and THC use category", 
+       x = "seconds")+
   theme_bw()
 
-jpeg(file.path(res_folder, "PrePost_Right_PercentChange.jpg"), 
-     height = 6, width = 8, res = 300, units = "in")
-ggplot(right.df, aes(x=frame, y = percent_change, group = subject_id))+
+# jpeg(file.path(res_folder, "PrePost_Right_PercentChange.jpg"), 
+#      height = 6, width = 8, res = 300, units = "in")
+ggplot(right.df, aes(x=frame/30, y = percent_change, group = subject_id))+
   geom_line(show.legend = FALSE, alpha = 0.5)+
   facet_grid(rows = vars(user_cat), cols = vars(tp))+
-  labs(title = "Percent Change by Pre/Post and THC use category")+
+  labs(title = "Percent Change by Pre/Post and THC use category", 
+       x = "seconds")+
   theme_bw()
-dev.off()
+# dev.off()
 ```
 
 Plots of Left and Right Eye for "POST" data. One pt has negative values for pupil size.
 ```{r post_plots}
 post.df <- ps[ps$tp == "post", ] 
 
-ggplot(post.df, aes(x=frame, y = percent_change, group = subject_id))+
+ggplot(post.df, aes(x=frame/30, y = percent_change, group = subject_id))+
   geom_line(show.legend = FALSE, alpha = 0.5)+
   facet_grid(rows = vars(user_cat), cols = vars(eye))+
-  labs(title = "Percent Change by Eye and THC use category - Post")+
+  labs(title = "Percent Change by Eye and THC use category - Post", 
+       x = "seconds")+
   theme_bw()
 
 pre.df <- ps[ps$tp == "pre2", ] 
 
 # jpeg(file.path(res_folder, "LeftRight_Pre_PercentChange.jpg"), 
 #      height = 6, width = 8, res = 300, units = "in")
-ggplot(pre.df, aes(x=frame, y = percent_change, group = subject_id))+
+ggplot(pre.df, aes(x=frame/30, y = percent_change, group = subject_id))+
   geom_line(show.legend = FALSE, alpha = 0.5)+
   facet_grid(rows = vars(user_cat), cols = vars(eye))+
-  labs(title = "Percent Change by Eye and THC use category - Pre")+
+  labs(title = "Percent Change by Eye and THC use category - Pre", 
+       x = "seconds")+
   theme_bw()
 # dev.off()
 ```
@@ -550,11 +556,12 @@ names(mean_fxn.l)[names(mean_fxn.l) == "Group.2"] <- "user_cat"
 
 mean_fxn.l$grp <- paste0(mean_fxn.l$tp, "_", mean_fxn.l$user_cat)
 
-ggplot(mean_fxn.l, aes(x=frame, y = percent_change, group = grp,  
+ggplot(mean_fxn.l, aes(x=frame/30, y = percent_change, group = grp,  
                        color = user_cat))+
   geom_line()+
   facet_grid(rows = vars(tp))+
-  labs(title = "Average Percent Change by Pre/Post and THC use category")+
+  labs(title = "Average Percent Change by Pre/Post and THC use category",
+       x = "seconds")+
   theme_bw()
 
 sd_fxn <- as.data.frame(aggregate(right_0.w[, 4:602], 
@@ -588,7 +595,7 @@ mu <- right_0.fpca$mu
 right_sd <- sqrt(right_0.fpca$evalues)
 right_Phi <- right_0.fpca$efunctions
 
-df_plot <- data.frame(frame = seq(0, 400, by = 1), 
+df_plot <- data.frame(seconds = seq(0, 400, by = 1)/30, 
                       mu = mu, 
                       errband1 = 2*right_Phi[, 1]*right_sd[1], 
                       errband2 = 2*right_Phi[, 2]*right_sd[2], 
@@ -597,61 +604,69 @@ df_plot <- data.frame(frame = seq(0, 400, by = 1),
                       errband5 = 2*right_Phi[, 5]*right_sd[5]
                       )
 
+ylim_max = max(df_plot$mu) + max(df_plot [, c("errband1", "errband2","errband3","errband4","errband5")], na.rm = T)
+ylim_min =  min(df_plot$mu) - max(df_plot [, c("errband1", "errband2","errband3","errband4","errband5")], na.rm = T)
+
 colors <- c("Pop.Mean" = "black", "+2SD" = "red", "-2SD" = "blue")
 
-plot_pc1 <- ggplot(data = df_plot, aes(x = frame, y = mu))+
+plot_pc1 <- ggplot(data = df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband1, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband1, color = "-2SD"))+
-  labs(x = "frame", 
+  geom_line(aes(x = seconds, y = mu+errband1, color = "+2SD"))+
+  geom_line(aes(x = seconds, y = mu-errband1, color = "-2SD"))+
+  labs(x = "seconds", 
        y = "Percent Change", 
        color = "Legend", 
        title = paste("PC1:", "% Var Explained:", right_0.fpca.pve[1]))+
   scale_color_manual(values = colors)+
+  scale_y_continuous(limits = c(ylim_min, ylim_max))+
   theme_bw()
 
-plot_pc2 <- ggplot(data = df_plot, aes(x = frame, y = mu))+
+plot_pc2 <- ggplot(data = df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband2, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband2, color = "-2SD"))+
-  labs(x = "frame", 
+  geom_line(aes(x = seconds, y = mu+errband2, color = "+2SD"))+
+  geom_line(aes(x = seconds, y = mu-errband2, color = "-2SD"))+
+  labs(x = "seconds", 
        y = "Percent Change", 
        color = "Legend", 
        title = paste("PC2:", "% Var Explained:", right_0.fpca.pve[2]))+
   scale_color_manual(values = colors)+
+  scale_y_continuous(limits = c(ylim_min, ylim_max))+
   theme_bw()
 
-plot_pc3 <- ggplot(data = df_plot, aes(x = frame, y = mu))+
+plot_pc3 <- ggplot(data = df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband3, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband3, color = "-2SD"))+
-  labs(x = "frame", 
+  geom_line(aes(x = seconds, y = mu+errband3, color = "+2SD"))+
+  geom_line(aes(x = seconds, y = mu-errband3, color = "-2SD"))+
+  labs(x = "seconds", 
        y = "Percent Change", 
        color = "Legend", 
        title = paste("PC3:", "% Var Explained:", right_0.fpca.pve[3]))+
   scale_color_manual(values = colors)+
+  scale_y_continuous(limits = c(ylim_min, ylim_max))+
   theme_bw()
 
-plot_pc4 <- ggplot(data = df_plot, aes(x = frame, y = mu))+
+plot_pc4 <- ggplot(data = df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband4, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband4, color = "-2SD"))+
-  labs(x = "frame", 
+  geom_line(aes(x = seconds, y = mu+errband4, color = "+2SD"))+
+  geom_line(aes(x = seconds, y = mu-errband4, color = "-2SD"))+
+  labs(x = "seconds", 
        y = "Percent Change", 
        color = "Legend", 
        title = paste("PC4:", "% Var Explained:", right_0.fpca.pve[4]))+
   scale_color_manual(values = colors)+
+  scale_y_continuous(limits = c(ylim_min, ylim_max))+
   theme_bw()
 
-plot_pc5 <- ggplot(data = df_plot, aes(x = frame, y = mu))+
+plot_pc5 <- ggplot(data = df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband5, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband5, color = "-2SD"))+
-  labs(x = "frame",
+  geom_line(aes(x = seconds, y = mu+errband5, color = "+2SD"))+
+  geom_line(aes(x = seconds, y = mu-errband5, color = "-2SD"))+
+  labs(x = "seconds",
        y = "Percent Change",
        color = "Legend",
        title = paste("PC5:", "% Var Explained:", right_0.fpca.pve[5]))+
   scale_color_manual(values = colors)+
+  scale_y_continuous(limits = c(ylim_min, ylim_max))+
   theme_bw()
 
 legend_postPC <- g_legend(plot_pc1)
@@ -701,9 +716,11 @@ highPC2.df <- data.frame(subject_id = substr(highPC2, 1, 7),
 
 for(i in 1:nrow(highPC2.df)){
   plot.df <- right_0.df[right_0.df$subject_id == highPC2.df$subject_id[i] & right_0.df$tp == highPC2.df$tp[i], ]
-  print(ggplot(plot.df, aes(x=frame, y = percent_change, group = subject_id, color = subject_id))+
+  print(ggplot(plot.df, aes(x=frame30, y = percent_change, group = subject_id, color = subject_id))+
           geom_line(show.legend = FALSE)+
-          labs(title = paste("Percent Change for high PC2 score --", "Subject:", highPC2.df$subject_id[i], "Timepoint:",                                      highPC2.df$tp[i]))+
+          labs(title = paste("Percent Change for high PC2 score --", "Subject:",
+                             highPC2.df$subject_id[i], "Timepoint:", highPC2.df$tp[i]), 
+               x = "seconds")+
           theme_bw())
 }
 ```
@@ -719,9 +736,10 @@ lowPC2.df <- data.frame(subject_id = substr(lowPC2, 1, 7),
 
 for(i in 1:nrow(lowPC2.df)){
   plot.df <- right_0.df[right_0.df$subject_id == lowPC2.df$subject_id[i] & right_0.df$tp == lowPC2.df$tp[i], ]
-  print(ggplot(plot.df, aes(x=frame, y = percent_change, group = subject_id, color = subject_id))+
+  print(ggplot(plot.df, aes(x=frame/30, y = percent_change, group = subject_id, color = subject_id))+
           geom_line(show.legend = FALSE)+
-          labs(title = paste("Percent Change for low PC2 score --", "Subject:", lowPC2.df$subject_id[i], "Timepoint:",                                      lowPC2.df$tp[i]))+
+          labs(title = paste("Percent Change for low PC2 score --", "Subject:", lowPC2.df$subject_id[i], "Timepoint:",                                      lowPC2.df$tp[i]), 
+               x = "seconds")+
           theme_bw())
 }
 
@@ -860,22 +878,30 @@ analytic_LR.N <- intersect(analytic.N, unique(left_0.pt.w$subject_id))
 ## Filter all datasets to analytic sample
 
 left_0.df <- left_0.df[left_0.df$subject_id %in% analytic_LR.N,]
+left_0.df$seconds <- left_0.df$frame/30
 left_0.post <- left_0.post[left_0.post$subject_id %in% analytic_LR.N, ]
+left_0.post$seconds <- left_0.post$frame/30
+
 left_0.post.w <- left_0.post.w[left_0.post.w$subject_id %in% analytic_LR.N ,]
 row.names(left_0.post.w) <- left_0.post.w$subject_id
 
+
 left_0.pt <- left_0.pt[left_0.pt$subject_id %in% analytic_LR.N, ]
+left_0.pt$seconds <- left_0.pt$frame/30
 left_0.pt.w <- left_0.pt.w[left_0.pt.w$subject_id %in% analytic_LR.N, ]
 row.names(left_0.pt.w) <- left_0.pt.w$subject_id
 
 ## Filter all datasets to analytic sample
 
 right_0.df <- right_0.df[right_0.df$subject_id %in% analytic.N,]
+right_0.df$seconds <- right_0.df$frame/30
 right_0.post <- right_0.post[right_0.post$subject_id %in% analytic.N, ]
+right_0.post$seconds <- right_0.post$frame/30
 right_0.post.w <- right_0.post.w[right_0.post.w$subject_id %in% analytic.N ,]
 row.names(right_0.post.w) <- right_0.post.w$subject_id
 
 right_0.pt <- right_0.pt[right_0.pt$subject_id %in% analytic.N, ]
+right_0.pt$seconds <- right_0.pt$frame/30
 right_0.pt.w <- right_0.pt.w[right_0.pt.w$subject_id %in% analytic.N, ]
 row.names(right_0.pt.w) <- right_0.pt.w$subject_id
 ```
@@ -890,7 +916,7 @@ table1(~demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postCo
 
 ## Post Data 
 ```{r postPlot}
-post.user <- ggplot(right_0.post, aes(x=frame, y = percent_change, group = subject_id))+
+post.user <- ggplot(right_0.post, aes(x=seconds, y = percent_change, group = subject_id))+
              geom_line(show.legend = FALSE, alpha = 0.5)+
              facet_grid(rows = vars(user_cat))+
              labs(title ="POST data percent change by THC use category")+
@@ -902,7 +928,7 @@ post.user <- ggplot(right_0.post, aes(x=frame, y = percent_change, group = subje
 Calculate the difference (post-pre) within subjects and plot by THC user category
 
 ```{r wi_subj_mean, warning=F, fig.height = 8, fig.width = 15}
-wi.user <- ggplot(right_0.pt, aes(x=frame, y = wiPctChg, group = subject_id))+
+wi.user <- ggplot(right_0.pt, aes(x=seconds, y = wiPctChg, group = subject_id))+
            geom_line(show.legend = FALSE, alpha = 0.5)+
            facet_grid(rows = vars(user_cat))+
            labs(title ="Within subject difference in percent change by THC use category")+
@@ -934,9 +960,10 @@ mean_fxn.pt.l$id <- NULL
 
 names(mean_fxn.pt.l)[names(mean_fxn.pt.l) == "Group.1"] <- "user_cat"
 
-ggplot(mean_fxn.pt.l, aes(x=frame, y = wi_percent_change, group = user_cat, color = user_cat))+
+ggplot(mean_fxn.pt.l, aes(x=frame/30, y = wi_percent_change, group = user_cat, color = user_cat))+
   geom_line()+
-  labs(title ="Average Within subject difference in percent change by THC use category")+
+  labs(title ="Average Within subject difference in percent change by THC use category", 
+       x = "seconds")+
   theme_bw()
 ```
 
@@ -965,11 +992,12 @@ sd_fxn.pt.l$id <- NULL
 names(sd_fxn.pt.l)[names(sd_fxn.pt.l) == "Group.1"] <- "user_cat"
 sd_fxn.pt.l$wi_percent_change_neg <- -1*sd_fxn.pt.l$wi_percent_change
 
-ggplot(sd_fxn.pt.l, aes(x=frame, y = wi_percent_change, group = user_cat, color = user_cat))+
+ggplot(sd_fxn.pt.l, aes(x=frame/30, y = wi_percent_change, group = user_cat, color = user_cat))+
   geom_line()+
-  geom_line(aes(x=frame, y = wi_percent_change_neg, group = user_cat, color = user_cat), 
+  geom_line(aes(x=frame/30, y = wi_percent_change_neg, group = user_cat, color = user_cat), 
             linetype = "dashed")+
-  labs(title ="+/- 1 SD Within subject difference in percent change by THC use category")+
+  labs(title ="+/- 1 SD Within subject difference in percent change by THC use category", 
+       x = "seconds")+
   theme_bw()
 ```
 
@@ -990,7 +1018,7 @@ missing.df <- data.frame(frame = seq(0, 400, by =1),
                             missingness = round(missingnessCol/nrow(right_0.pt.w)*100, 2), 
                             stringsAsFactors = F)
 
-ggplot(missing.df, aes(x=frame, y= missingness))+
+ggplot(missing.df, aes(x=frame/30, y= missingness))+
   geom_line()
 ```
 Truncate within person difference data to frame 400 where missingness reaches 50%. 
@@ -1034,7 +1062,7 @@ mu <- right_0_wi.fpca$mu
 right_sd <- sqrt(right_0_wi.fpca$evalues)
 right_Phi <- right_0_wi.fpca$efunctions 
 
-wi.df_plot <- data.frame(frame = seq(0, 400, by = 1), 
+wi.df_plot <- data.frame(seconds = seq(0, 400, by = 1)/30, 
                       mu = mu, 
                       errband1 = 2*right_Phi[, 1]*right_sd[1], 
                       errband2 = 2*right_Phi[, 2]*right_sd[2], 
@@ -1043,72 +1071,83 @@ wi.df_plot <- data.frame(frame = seq(0, 400, by = 1),
                       errband5 = 2*right_Phi[, 5]*right_sd[5], 
                       errband6 = 2*right_Phi[, 6]*right_sd[6])
 
+
+wi.ylim_max = max(wi.df_plot$mu) + max(wi.df_plot [, c("errband1", "errband2","errband3","errband4","errband5", "errband6")], na.rm = T)
+wi.ylim_min =  min(wi.df_plot$mu) - max(wi.df_plot [, c("errband1", "errband2","errband3","errband4","errband5", "errband6")], na.rm = T)
+
+
 colors <- c("Pop.Mean" = "black", "+2SD" = "red", "-2SD" = "blue")
 
-wi.plot_pc1 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+wi.plot_pc1 <- ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband1, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband1, color = "-2SD"))+
+  geom_line(aes(x = seconds, y = mu+errband1, color = "+2SD"))+
+  geom_line(aes(x = seconds, y = mu-errband1, color = "-2SD"))+
   labs(x = "frame", 
        y = "Percent Change", 
        color = "Legend", 
        title = paste("PC1:", "% Var Explained:", right_0_wi.fpca.pve[1]))+
   scale_color_manual(values = colors)+
+  scale_y_continuous(limits = c(wi.ylim_min, wi.ylim_max))+
   theme_bw()
 
-wi.plot_pc2 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+wi.plot_pc2 <- ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband2, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband2, color = "-2SD"))+
+  geom_line(aes(x = seconds, y = mu+errband2, color = "+2SD"))+
+  geom_line(aes(x = seconds, y = mu-errband2, color = "-2SD"))+
   labs(x = "frame", 
        y = "Percent Change", 
        color = "Legend", 
        title = paste("PC2:", "% Var Explained:", right_0_wi.fpca.pve[2]))+
   scale_color_manual(values = colors)+
+  scale_y_continuous(limits = c(wi.ylim_min, wi.ylim_max))+
   theme_bw()
 
-wi.plot_pc3 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+wi.plot_pc3 <- ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband3, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband3, color = "-2SD"))+
+  geom_line(aes(x = seconds, y = mu+errband3, color = "+2SD"))+
+  geom_line(aes(x = seconds, y = mu-errband3, color = "-2SD"))+
   labs(x = "frame", 
        y = "Percent Change", 
        color = "Legend", 
        title = paste("PC3:", "% Var Explained:", right_0_wi.fpca.pve[3]))+
   scale_color_manual(values = colors)+
+  scale_y_continuous(limits = c(wi.ylim_min, wi.ylim_max))+
   theme_bw()
 
-wi.plot_pc4 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+wi.plot_pc4 <- ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband4, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband4, color = "-2SD"))+
+  geom_line(aes(x = seconds, y = mu+errband4, color = "+2SD"))+
+  geom_line(aes(x = seconds, y = mu-errband4, color = "-2SD"))+
   labs(x = "frame", 
        y = "Percent Change", 
        color = "Legend", 
        title = paste("PC4:", "% Var Explained:", right_0_wi.fpca.pve[4]))+
   scale_color_manual(values = colors)+
+  scale_y_continuous(limits = c(wi.ylim_min, wi.ylim_max))+
   theme_bw()
 
-wi.plot_pc5 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+wi.plot_pc5 <- ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband5, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband5, color = "-2SD"))+
+  geom_line(aes(x = seconds, y = mu+errband5, color = "+2SD"))+
+  geom_line(aes(x = seconds, y = mu-errband5, color = "-2SD"))+
   labs(x = "frame", 
        y = "Percent Change", 
        color = "Legend", 
        title = paste("PC5:", "% Var Explained:", right_0_wi.fpca.pve[5]))+
   scale_color_manual(values = colors)+
+  scale_y_continuous(limits = c(wi.ylim_min, wi.ylim_max))+
   theme_bw()
 
-wi.plot_pc6 <- ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+wi.plot_pc6 <- ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband6, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband6, color = "-2SD"))+
+  geom_line(aes(x = seconds, y = mu+errband6, color = "+2SD"))+
+  geom_line(aes(x = seconds, y = mu-errband6, color = "-2SD"))+
   labs(x = "frame", 
        y = "Percent Change", 
        color = "Legend", 
        title = paste("PC6:", "% Var Explained:", right_0_wi.fpca.pve[6]))+
   scale_color_manual(values = colors)+
+  scale_y_continuous(limits = c(wi.ylim_min, wi.ylim_max))+
   theme_bw()
 
 legend_wiPC <- g_legend(wi.plot_pc1)
@@ -1196,21 +1235,21 @@ pctile95.wi <- wi.scores$subject_id[wi.scores$PC1 > q.95]
 
 pctile95.wi.df <- right_0.pt[right_0.pt$subject_id %in% pctile95.wi, ]
 
-ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband1, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband1, color = "-2SD"))+
+  geom_line(aes(x = seconds, y = mu+errband1, color = "+2SD"))+
+  geom_line(aes(x = seconds, y = mu-errband1, color = "-2SD"))+
   labs(x = "frame", 
        y = "Percent Change", 
        color = "Legend", 
        title = "Individuals in the Top 5th Percentile of PC1 scores")+
-  geom_line(data = pctile95.wi.df, aes(x=frame, y = wiPctChg, group = subject_id, color = subject_id))+
+  geom_line(data = pctile95.wi.df, aes(x=frame/30, y = wiPctChg, group = subject_id, color = subject_id))+
   scale_color_manual(values = colors)+
   theme_bw()
 
 for(i in pctile95.wi){
   print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
-               aes(x = frame, y = percent_change, group = tp, color = tp))+
+               aes(x = seconds, y = percent_change, group = tp, color = tp))+
   geom_line()+
   labs(title = paste0(i, " Pre/Post: Top 5th Percentile PC1 scores"))+
   theme_bw())
@@ -1222,21 +1261,21 @@ pctile05.wi <- wi.scores$subject_id[wi.scores$PC1 < q.05]
 
 pctile05.wi.df <- right_0.pt[right_0.pt$subject_id %in% pctile05.wi, ]
 
-ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband1, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband1, color = "-2SD"))+
+  geom_line(aes(x = seconds, y = mu+errband1, color = "+2SD"))+
+  geom_line(aes(x = seconds, y = mu-errband1, color = "-2SD"))+
   labs(x = "frame", 
        y = "Percent Change", 
        color = "Legend", 
        title = "Individuals in the 5th Percentile of PC1 scores")+
-  geom_line(data = pctile05.wi.df, aes(x=frame, y = wiPctChg, group = subject_id, color = subject_id))+
+  geom_line(data = pctile05.wi.df, aes(x=frame/30, y = wiPctChg, group = subject_id, color = subject_id))+
   scale_color_manual(values = colors)+
   theme_bw()
 
 for(i in pctile05.wi){
   print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
-               aes(x = frame, y = percent_change, group = tp, color = tp))+
+               aes(x = seconds, y = percent_change, group = tp, color = tp))+
   geom_line()+
   labs(title = paste0(i, " Pre/Post: 5th Percentile PC1 scores"))+
   theme_bw())
@@ -1253,21 +1292,21 @@ pctile95.wi <- wi.scores$subject_id[wi.scores$PC2 > q.95]
 
 pctile95.wi.df <- right_0.pt[right_0.pt$subject_id %in% pctile95.wi, ]
 
-ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband2, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband2, color = "-2SD"))+
+  geom_line(aes(x = seconds, y = mu+errband2, color = "+2SD"))+
+  geom_line(aes(x = seconds, y = mu-errband2, color = "-2SD"))+
   labs(x = "frame", 
        y = "Percent Change", 
        color = "Legend", 
        title = "Individuals in the Top 5th Percentile of PC2 scores")+
-  geom_line(data = pctile95.wi.df, aes(x=frame, y = wiPctChg, group = subject_id, color = subject_id))+
+  geom_line(data = pctile95.wi.df, aes(x=frame/30, y = wiPctChg, group = subject_id, color = subject_id))+
   scale_color_manual(values = colors)+
   theme_bw()
 
 for(i in pctile95.wi){
   print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
-               aes(x = frame, y = percent_change, group = tp, color = tp))+
+               aes(x = seconds, y = percent_change, group = tp, color = tp))+
   geom_line()+
   labs(title = paste0(i, " Pre/Post: Top 5th Percentile PC2 scores"))+
   theme_bw())
@@ -1279,21 +1318,21 @@ pctile05.wi <- wi.scores$subject_id[wi.scores$PC2 < q.05]
 
 pctile05.wi.df <- right_0.pt[right_0.pt$subject_id %in% pctile05.wi, ]
 
-ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband2, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband2, color = "-2SD"))+
+  geom_line(aes(x = seconds, y = mu+errband2, color = "+2SD"))+
+  geom_line(aes(x = seconds, y = mu-errband2, color = "-2SD"))+
   labs(x = "frame", 
        y = "Percent Change", 
        color = "Legend", 
        title = "Individuals in the 5th Percentile of PC2 scores")+
-  geom_line(data = pctile05.wi.df, aes(x=frame, y = wiPctChg, group = subject_id, color = subject_id))+
+  geom_line(data = pctile05.wi.df, aes(x=frame/30, y = wiPctChg, group = subject_id, color = subject_id))+
   scale_color_manual(values = colors)+
   theme_bw()
 
 for(i in pctile05.wi){
   print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
-               aes(x = frame, y = percent_change, group = tp, color = tp))+
+               aes(x = seconds, y = percent_change, group = tp, color = tp))+
   geom_line()+
   labs(title = paste0(i, " Pre/Post: 5th Percentile PC2 scores"))+
   theme_bw())
@@ -1308,21 +1347,21 @@ pctile95.wi <- wi.scores$subject_id[wi.scores$PC3 > q.95]
 
 pctile95.wi.df <- right_0.pt[right_0.pt$subject_id %in% pctile95.wi, ]
 
-ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband3, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband3, color = "-2SD"))+
+  geom_line(aes(x = seconds, y = mu+errband3, color = "+2SD"))+
+  geom_line(aes(x = seconds, y = mu-errband3, color = "-2SD"))+
   labs(x = "frame", 
        y = "Percent Change", 
        color = "Legend", 
        title = "Individuals in the Top 5th Percentile of PC3 scores")+
-  geom_line(data = pctile95.wi.df, aes(x=frame, y = wiPctChg, group = subject_id, color = subject_id))+
+  geom_line(data = pctile95.wi.df, aes(x=seconds, y = wiPctChg, group = subject_id, color = subject_id))+
   scale_color_manual(values = colors)+
   theme_bw()
 
 for(i in pctile95.wi){
   print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
-               aes(x = frame, y = percent_change, group = tp, color = tp))+
+               aes(x = seconds, y = percent_change, group = tp, color = tp))+
   geom_line()+
   labs(title = paste0(i, " Pre/Post: Top 5th Percentile PC3 scores"))+
   theme_bw())
@@ -1334,21 +1373,21 @@ pctile05.wi <- wi.scores$subject_id[wi.scores$PC3 < q.05]
 
 pctile05.wi.df <- right_0.pt[right_0.pt$subject_id %in% pctile05.wi, ]
 
-ggplot(data = wi.df_plot, aes(x = frame, y = mu))+
+ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = frame, y = mu+errband3, color = "+2SD"))+
-  geom_line(aes(x = frame, y = mu-errband3, color = "-2SD"))+
+  geom_line(aes(x = seconds, y = mu+errband3, color = "+2SD"))+
+  geom_line(aes(x = seconds, y = mu-errband3, color = "-2SD"))+
   labs(x = "frame", 
        y = "Percent Change", 
        color = "Legend", 
        title = "Individuals in the 5th Percentile of PC3 scores")+
-  geom_line(data = pctile05.wi.df, aes(x=frame, y = wiPctChg, group = subject_id, color = subject_id))+
+  geom_line(data = pctile05.wi.df, aes(x=frame/30, y = wiPctChg, group = subject_id, color = subject_id))+
   scale_color_manual(values = colors)+
   theme_bw()
 
 for(i in pctile05.wi){
   print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
-               aes(x = frame, y = percent_change, group = tp, color = tp))+
+               aes(x = seconds, y = percent_change, group = tp, color = tp))+
   geom_line()+
   labs(title = paste0(i, " Pre/Post: 5th Percentile PC3 scores"))+
   theme_bw())
@@ -1361,12 +1400,13 @@ for(i in pctile05.wi){
 ### INVESTIGATE BUMPS IN MEAN Function
 
 ## Pre/Post Across subjects
-ggplot(mean_fxn.l, aes(x=frame, y = percent_change, group = grp,  
+ggplot(mean_fxn.l, aes(x=frame/30, y = percent_change, group = grp,  
                        color = user_cat))+
   geom_line()+
   xlim(50, 200)+
   facet_grid(rows = vars(tp))+
-  labs(title = "Average Percent Change by Pre/Post and THC use category")+
+  labs(title = "Average Percent Change by Pre/Post and THC use category", 
+       x = "seconds")+
   theme_bw()
 
 right_0.w[right_0.w$user_cat == "non-user" & right_0.w$tp == "pre2", 103:105]
@@ -1374,10 +1414,11 @@ right_0.w[right_0.w$user_cat == "non-user" & right_0.w$tp == "post", 101:103]
 
 
 ## Within person plots
-ggplot(mean_fxn.pt.l, aes(x=frame, y = wi_percent_change, group = user_cat, color = user_cat))+
+ggplot(mean_fxn.pt.l, aes(x=frame/30, y = wi_percent_change, group = user_cat, color = user_cat))+
   geom_line()+
   xlim(50, 200)+
-  labs(title ="Average Within subject difference in percent change by THC use category")+
+  labs(title ="Average Within subject difference in percent change by THC use category", 
+       x = "seconds")+
   theme_bw()
 
 ## Mean function Spike in Occassional user group
@@ -1551,17 +1592,17 @@ w01 <- function(nN, v01_r, auc_r, v01_s, auc_s){
   return(res)
 }
 
-w10_postPC_postSF <- w10(nP = sum(auc_inference$smoker == 1), 
-                         v10_r = V_postPC_10,
-                         auc_r = auc.df$AUC[auc.df$Label == "Post AUC PCs"], 
-                         v10_s = V_postSF_10,
-                         auc_s = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"])
-
-w01_postPC_postSF <- w01(nN = sum(auc_inference$smoker == 0), 
-                         v01_r = V_postPC_01,
-                         auc_r = auc.df$AUC[auc.df$Label == "Post AUC PCs"], 
-                         v01_s = V_postSF_01,
-                         auc_s = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"])
+# w10_postPC_postSF <- w10(nP = sum(auc_inference$smoker == 1), 
+#                          v10_r = V_postPC_10,
+#                          auc_r = auc.df$AUC[auc.df$Label == "Post AUC PCs"], 
+#                          v10_s = V_postSF_10,
+#                          auc_s = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"])
+# 
+# w01_postPC_postSF <- w01(nN = sum(auc_inference$smoker == 0), 
+#                          v01_r = V_postPC_01,
+#                          auc_r = auc.df$AUC[auc.df$Label == "Post AUC PCs"], 
+#                          v01_s = V_postSF_01,
+#                          auc_s = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"])
                          
 
 w_rs <- function(nP, nN, srpi_r, srnj_r, srpi_s, srnj_s, auc_r, auc_s){
@@ -2099,7 +2140,7 @@ df_pred_dly <- data.frame("sind" = unique(right_0.gam.df$sind), "occasional" = 0
 lpmat_dly <- predict(post_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "lpmatrix")
 
 
-pred_df <- data.frame(frame = rep(seq(0, 400), 3),
+pred_df <- data.frame(seconds = rep(seq(0, 400), 3)/30,
                       user = c(rep("non-user", 401), rep("occasional", 401),rep("daily", 401)), 
                       mean = c(lpmat_non %*% post_gam.coef, 
                                lpmat_occ %*% post_gam.coef, lpmat_dly %*% post_gam.coef), 
@@ -2108,19 +2149,19 @@ pred_df <- data.frame(frame = rep(seq(0, 400), 3),
                              sqrt(diag(lpmat_dly %*% post_gam.cov %*% t(lpmat_dly)))), 
                       stringsAsFactors = F)
 
-post_userProfile <- ggplot(data = pred_df, aes(x = frame, y = mean, group = user, col = user))+
+post_userProfile <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
                     geom_line()+
-                    # geom_line(aes(x=frame, y = mean + 2*se, group = user, col = user), linetype = "longdash")+
-                    # geom_line(aes(x=frame, y = mean - 2*se, group = user, col = user), linetype = "longdash")+
                     labs(y = "Percent Change")+
                     theme_bw()
 
 legend_userProfile <- g_legend(post_userProfile)
 
-post_userProfile.se <- ggplot(data = pred_df, aes(x = frame, y = mean, group = user, col = user))+
+post_userProfile.se <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
                     geom_line()+
-                    geom_line(aes(x=frame, y = mean + 2*se, group = user, col = user), linetype = "longdash")+
-                    geom_line(aes(x=frame, y = mean - 2*se, group = user, col = user), linetype = "longdash")+
+                    geom_line(aes(x=seconds, y = mean + 2*se, group = user, col = user),
+                              linetype = "longdash")+
+                    geom_line(aes(x=seconds, y = mean - 2*se, group = user, col = user),
+                              linetype = "longdash")+
                     labs(y = "")+
                     theme_bw()
                     
@@ -2135,7 +2176,7 @@ post_userTraj <- grid.arrange(arrangeGrob(post_userProfile+theme(legend.position
 pred_f1 <- predict(post_gam.fri, newdata=df_pred_occ, se.fit=TRUE, type = "terms")
 pred_f2 <- predict(post_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "terms")
 
-pred_coef_df <- data.frame(frame = seq(0, 400),
+pred_coef_df <- data.frame(seconds = seq(0, 400)/30,
                            f0_hat = lpmat_non %*% post_gam.coef, 
                            f0_se = sqrt(diag(lpmat_non %*% post_gam.cov %*% t(lpmat_non))), 
                            f1_hat = pred_f1$fit[, 2], 
@@ -2143,29 +2184,29 @@ pred_coef_df <- data.frame(frame = seq(0, 400),
                            f2_hat = pred_f2$fit[, 3], 
                            f2_se = pred_f2$se.fit[, 3])
 
-post_non_plt <- ggplot(data = pred_coef_df, aes(x=frame, y = f0_hat))+
+post_non_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f0_hat))+
                 geom_line()+
-                geom_line(aes(x = frame, y = f0_hat + 2*f0_se), linetype = "longdash")+
-                geom_line(aes(x = frame, y = f0_hat - 2*f0_se), linetype = "longdash")+
+                geom_line(aes(x = seconds, y = f0_hat + 2*f0_se), linetype = "longdash")+
+                geom_line(aes(x = seconds, y = f0_hat - 2*f0_se), linetype = "longdash")+
                 labs(title = "Average Percent Change of a Non-user (Post)", ylab = "Percent Change")+
                 theme_bw()
 
-post_occ_plt <- ggplot(data = pred_coef_df, aes(x=frame, y = f1_hat))+
+post_occ_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f1_hat))+
                 geom_line()+
-                geom_line(aes(x = frame, y = f1_hat + 2*f1_se), linetype = "longdash")+
-                geom_line(aes(x = frame, y = f1_hat - 2*f1_se), linetype = "longdash")+
-                geom_line(aes(x = frame, y = 0), col = "darkred")+
+                geom_line(aes(x = seconds, y = f1_hat + 2*f1_se), linetype = "longdash")+
+                geom_line(aes(x = seconds, y = f1_hat - 2*f1_se), linetype = "longdash")+
+                geom_line(aes(x = seconds, y = 0), col = "darkred")+
                 labs(title = "Difference in Percent Change: Occasional and Non-user (Post)", 
                      y= "")+
                 theme_bw()+
                 scale_x_continuous(expand = c(0, 0))+
                 theme(rect = element_rect(fill = "transparent"))
 
-post_dly_plt <- ggplot(data = pred_coef_df, aes(x=frame, y = f2_hat))+
+post_dly_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f2_hat))+
                 geom_line()+
-                geom_line(aes(x = frame, y = f2_hat + 2*f2_se), linetype = "longdash")+
-                geom_line(aes(x = frame, y = f2_hat - 2*f2_se), linetype = "longdash")+
-                geom_line(aes(x = frame, y = 0), col = "darkred")+
+                geom_line(aes(x = seconds, y = f2_hat + 2*f2_se), linetype = "longdash")+
+                geom_line(aes(x = seconds, y = f2_hat - 2*f2_se), linetype = "longdash")+
+                geom_line(aes(x = seconds, y = 0), col = "darkred")+
                 labs(title = "Difference in Percent Change: Daily and Non-user (Post)", 
                      y = "")+
                 theme_bw()+
@@ -2197,22 +2238,22 @@ Plot difference between daily and occasional user
 f2_f1 <- (lpmat_dly - lpmat_occ) %*% post_gam.coef
 f2_f1.se <- sqrt(diag((lpmat_dly - lpmat_occ) %*% post_gam.cov %*% t((lpmat_dly - lpmat_occ))))
 
-f2_f1_diff_df <- data.frame(frame = seq(0, 400), 
+f2_f1_diff_df <- data.frame(seconds = seq(0, 400)/30, 
                             f2f1_diff = f2_f1, 
                             f2f1_se = f2_f1.se)
 
-ggplot(data = f2_f1_diff_df, aes(x=frame, y = f2f1_diff))+
+ggplot(data = f2_f1_diff_df, aes(x=seconds, y = f2f1_diff))+
   geom_line()+
-  geom_line(aes(x = frame, y = f2f1_diff + 2*f2f1_se), linetype = "longdash")+
-  geom_line(aes(x = frame, y = f2f1_diff - 2*f2f1_se), linetype = "longdash")+
+  geom_line(aes(x = seconds, y = f2f1_diff + 2*f2f1_se), linetype = "longdash")+
+  geom_line(aes(x = seconds, y = f2f1_diff - 2*f2f1_se), linetype = "longdash")+
   labs(title = "Difference between Average Daily vs Occasional User", ylab = "f2_hat - f1_hat")+
   theme_bw()
 
-post_dlyocc_plt <- ggplot(data = f2_f1_diff_df, aes(x=frame, y = f2f1_diff))+
+post_dlyocc_plt <- ggplot(data = f2_f1_diff_df, aes(x=seconds, y = f2f1_diff))+
                    geom_line()+
-                   geom_line(aes(x = frame, y = f2f1_diff + 2*f2f1_se), linetype = "longdash")+
-                   geom_line(aes(x = frame, y = f2f1_diff - 2*f2f1_se), linetype = "longdash")+
-                   geom_line(aes(x = frame, y = 0), col = "darkred")+
+                   geom_line(aes(x = seconds, y = f2f1_diff + 2*f2f1_se), linetype = "longdash")+
+                   geom_line(aes(x = seconds, y = f2f1_diff - 2*f2f1_se), linetype = "longdash")+
+                   geom_line(aes(x = seconds, y = 0), col = "darkred")+
                    labs(title = "Difference in Percent Change: Daily vs Occasional User", 
                         y = "")+
                    theme_bw()+
@@ -2221,16 +2262,19 @@ post_dlyocc_plt <- ggplot(data = f2_f1_diff_df, aes(x=frame, y = f2f1_diff))+
 
 ylab <- textGrob(label = "Difference in Percent Change", rot = 90, 
                  gp = gpar(fontsize = 12))
-posval <- textGrob(label = sapply(strwrap("Less Constriction in Daily User", width = 15, simplify = F),
+posval <- textGrob(label = sapply(strwrap("Less Constriction in Daily User", width = 15, 
+                                          simplify = F),
                                   paste, collapse = "\n"), rot = 0, just = "bottom", 
                  gp = gpar(fontsize = 8))
-negval <- textGrob(label = sapply(strwrap("More Constriction in Daily User", width = 15, simplify = F),
+negval <- textGrob(label = sapply(strwrap("More Constriction in Daily User", width = 15, 
+                                          simplify = F),
                                   paste, collapse = "\n"), rot = 0, 
                  gp = gpar(fontsize = 8))
 
 post_dlyocc_coef <- grid.arrange(ylab, posval, negval, post_dlyocc_plt, 
                                  ncol = 2, nrow = 2, 
-                                 layout_matrix = rbind(c(1, 2, rep(4, 15)), c(1, 3, rep(4, 15))))
+                                 layout_matrix = rbind(c(1, 2, rep(4, 15)), 
+                                                       c(1, 3, rep(4, 15))))
 
 post_dlyocc_coef
 ```
@@ -2311,7 +2355,7 @@ df_pred_smk <- data.frame("sind" = unique(smoker.gam.df$sind), "smoker" = 1,
 
 lpmat_smk <- predict(post_smoker_gam.fri, newdata=df_pred_smk, se.fit=TRUE, type = "lpmatrix")
 
-pred_df <- data.frame(frame = rep(seq(0, 400), 2),
+pred_df <- data.frame(seconds = rep(seq(0, 400), 2)/30,
                       user = c(rep("non-user", 401), rep("smoker", 401)), 
                       mean = c(lpmat_non %*% post_smoker_gam.coef, 
                                lpmat_smk %*% post_smoker_gam.coef), 
@@ -2319,7 +2363,7 @@ pred_df <- data.frame(frame = rep(seq(0, 400), 2),
                              sqrt(diag(lpmat_smk %*% post_smoker_gam.cov %*% t(lpmat_smk)))), 
                       stringsAsFactors = F)
 
-post_smkProfile <- ggplot(data = pred_df, aes(x = frame, y = mean, group = user, col = user))+
+post_smkProfile <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
                    geom_line()+
                    scale_y_continuous(limits = c(min(pred_df$mean - 2*pred_df$se),
                                                  max(pred_df$mean+2*pred_df$se)))+
@@ -2328,10 +2372,12 @@ post_smkProfile <- ggplot(data = pred_df, aes(x = frame, y = mean, group = user,
 
 legend_smkProfile <- g_legend(post_smkProfile)
 
-post_smkProfile.se <- ggplot(data = pred_df, aes(x = frame, y = mean, group = user, col = user))+
+post_smkProfile.se <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
                       geom_line()+
-                      geom_line(aes(x=frame, y = mean + 2*se, group = user, col = user), linetype = "longdash")+
-                      geom_line(aes(x=frame, y = mean - 2*se, group = user, col = user), linetype = "longdash")+
+                      geom_line(aes(x=seconds, y = mean + 2*se, group = user, col = user),
+                                linetype = "longdash")+
+                      geom_line(aes(x=seconds, y = mean - 2*se, group = user, col = user),
+                                linetype = "longdash")+
                       scale_y_continuous(limits = c(min(pred_df$mean - 2*pred_df$se),
                                                     max(pred_df$mean+2*pred_df$se)))+
                       labs(y = "")+
@@ -2348,17 +2394,17 @@ post_smk <- grid.arrange(arrangeGrob(post_smkProfile+theme(legend.position = "no
 # pred_f0 <- predict(post_smoker_gam.fri, newdata=df_pred_non, se.fit=TRUE, type = "iterms")
 pred_f1 <- predict(post_smoker_gam.fri, newdata=df_pred_smk, se.fit=TRUE, type = "terms")
 
-pred_coef_df <- data.frame(frame = seq(0, 400),
+pred_coef_df <- data.frame(seconds = seq(0, 400)/30,
                            f0_hat = lpmat_non %*% post_smoker_gam.coef, 
                            f0_se = sqrt(diag(lpmat_non %*% post_smoker_gam.cov %*% t(lpmat_non))), 
                            f1_hat = pred_f1$fit[, 2], 
                            f1_se = pred_f1$se.fit[, 2])
 
-post_smk_plt <- ggplot(data = pred_coef_df, aes(x=frame, y = f1_hat))+
+post_smk_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f1_hat))+
                 geom_line()+
-                geom_line(aes(x = frame, y = f1_hat + 2*f1_se), linetype = "longdash")+
-                geom_line(aes(x = frame, y = f1_hat - 2*f1_se), linetype = "longdash")+
-                geom_line(aes(x = frame, y = 0), col = "darkred")+
+                geom_line(aes(x = seconds, y = f1_hat + 2*f1_se), linetype = "longdash")+
+                geom_line(aes(x = seconds, y = f1_hat - 2*f1_se), linetype = "longdash")+
+                geom_line(aes(x = seconds, y = 0), col = "darkred")+
                 labs(title = "Difference in Percent Change: Smoker and Non-smoker", 
                      y = "")+
                 theme_bw()+
@@ -2367,10 +2413,12 @@ post_smk_plt <- ggplot(data = pred_coef_df, aes(x=frame, y = f1_hat))+
 
 ylab <- textGrob(label = "Difference in Percent Change", rot = 90, 
                  gp = gpar(fontsize = 12))
-posval <- textGrob(label = sapply(strwrap("Less Constriction in Smokers", width = 15, simplify = F),
-                                  paste, collapse = "\n"), rot = 0, just = "bottom", 
-                 gp = gpar(fontsize = 8))
-negval <- textGrob(label = sapply(strwrap("More Constriction in Smokers", width = 15, simplify = F),
+posval <- textGrob(label = sapply(strwrap("Less Constriction in Smokers", 
+                                          width = 15, simplify = F),
+                                  paste, collapse = "\n"), rot = 0, just = "bottom",
+                   gp = gpar(fontsize = 8))
+negval <- textGrob(label = sapply(strwrap("More Constriction in Smokers", 
+                                          width = 15, simplify = F),
                                   paste, collapse = "\n"), rot = 0, 
                  gp = gpar(fontsize = 8))
 
@@ -2481,7 +2529,7 @@ df_pred_dly <- data.frame("sind" = unique(right_0.pt.gam.df$sind), "occasional" 
 lpmat_dly <- predict(wi_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "lpmatrix")
 
 
-pred_df <- data.frame(frame = rep(seq(0, 400), 3),
+pred_df <- data.frame(seconds = rep(seq(0, 400), 3)/30,
                       user = c(rep("non-user", 401), rep("occasional", 401),rep("daily", 401)), 
                       mean = c(lpmat_non %*% wi_gam.coef, 
                                lpmat_occ %*% wi_gam.coef, lpmat_dly %*% wi_gam.coef), 
@@ -2496,7 +2544,7 @@ pred_df <- data.frame(frame = rep(seq(0, 400), 3),
 #   geom_line(aes(x=frame, y = mean - 2*se, group = user, col = user), linetype = "longdash")+
 #   theme_bw()
 
-wi_userProfile <- ggplot(data = pred_df, aes(x = frame, y = mean, group = user, col = user))+
+wi_userProfile <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
                    geom_line()+
                    scale_y_continuous(limits = c(min(pred_df$mean - 2*pred_df$se),
                                                  max(pred_df$mean+2*pred_df$se)))+
@@ -2505,10 +2553,12 @@ wi_userProfile <- ggplot(data = pred_df, aes(x = frame, y = mean, group = user, 
 
 legend_userProfile <- g_legend(wi_userProfile)
 
-wi_userProfile.se <- ggplot(data = pred_df, aes(x = frame, y = mean, group = user, col = user))+
+wi_userProfile.se <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
                       geom_line()+
-                      geom_line(aes(x=frame, y = mean + 2*se, group = user, col = user), linetype = "longdash")+
-                      geom_line(aes(x=frame, y = mean - 2*se, group = user, col = user), linetype = "longdash")+
+                      geom_line(aes(x=seconds, y = mean + 2*se, group = user, col = user),
+                                linetype = "longdash")+
+                      geom_line(aes(x=seconds, y = mean - 2*se, group = user, col = user),
+                                linetype = "longdash")+
                       scale_y_continuous(limits = c(min(pred_df$mean - 2*pred_df$se),
                                                     max(pred_df$mean+2*pred_df$se)))+
                       labs(y = "")+
@@ -2533,7 +2583,7 @@ grid.arrange(post_userTraj, wi_userTraj, ncol = 2)
 pred_f1 <- predict(wi_gam.fri, newdata=df_pred_occ, se.fit=TRUE, type = "terms")
 pred_f2 <- predict(wi_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "terms")
 
-pred_coef_df <- data.frame(frame = seq(0, 400),
+pred_coef_df <- data.frame(seconds = seq(0, 400)/30,
                            f0_hat = lpmat_non %*% wi_gam.coef, 
                            f0_se = sqrt(diag(lpmat_non %*% wi_gam.cov %*% t(lpmat_non))), 
                            f1_hat = pred_f1$fit[, 2], 
@@ -2548,22 +2598,22 @@ pred_coef_df <- data.frame(frame = seq(0, 400),
 #   labs(title = "Average Response of a Non-user", ylab = "Within Person Difference in Percent Change")+
 #   theme_bw()
 
-wi_occ_plt <-  ggplot(data = pred_coef_df, aes(x=frame, y = f1_hat))+
+wi_occ_plt <-  ggplot(data = pred_coef_df, aes(x=seconds, y = f1_hat))+
                geom_line()+
-               geom_line(aes(x = frame, y = f1_hat + 2*f1_se), linetype = "longdash")+
-               geom_line(aes(x = frame, y = f1_hat - 2*f1_se), linetype = "longdash")+
-               geom_line(aes(x = frame, y = 0), col = "darkred")+
+               geom_line(aes(x = seconds, y = f1_hat + 2*f1_se), linetype = "longdash")+
+               geom_line(aes(x = seconds, y = f1_hat - 2*f1_se), linetype = "longdash")+
+               geom_line(aes(x = seconds, y = 0), col = "darkred")+
                labs(title = "Difference in Within Person Difference (WPD): Occasional and Non-user", 
                     y = "")+
                theme_bw()+
                scale_x_continuous(expand = c(0, 0))+
                theme(rect = element_rect(fill = "transparent"))
 
-wi_dly_plt <- ggplot(data = pred_coef_df, aes(x=frame, y = f2_hat))+
+wi_dly_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f2_hat))+
               geom_line()+
-              geom_line(aes(x = frame, y = f2_hat + 2*f2_se), linetype = "longdash")+
-              geom_line(aes(x = frame, y = f2_hat - 2*f2_se), linetype = "longdash")+
-              geom_line(aes(x = frame, y = 0), col = "darkred")+
+              geom_line(aes(x = seconds, y = f2_hat + 2*f2_se), linetype = "longdash")+
+              geom_line(aes(x = seconds, y = f2_hat - 2*f2_se), linetype = "longdash")+
+              geom_line(aes(x = seconds, y = 0), col = "darkred")+
               labs(title = "Difference in Within Person Difference (WPD): Daily and Non-user", 
                    y = "")+
               theme_bw()+
@@ -2572,10 +2622,12 @@ wi_dly_plt <- ggplot(data = pred_coef_df, aes(x=frame, y = f2_hat))+
 
 ylab <- textGrob(label = "Difference in WPD in Percent Change", rot = 90, 
                  gp = gpar(fontsize = 12))
-posval <- textGrob(label = sapply(strwrap("More WPD Constriction in User", width = 15, simplify = F),
+posval <- textGrob(label = sapply(strwrap("More WPD Constriction in User", 
+                                          width = 15, simplify = F),
                                   paste, collapse = "\n"), rot = 0, 
                  gp = gpar(fontsize = 8))
-negval <- textGrob(label = sapply(strwrap("Less WPD Constriction in User", width = 15, simplify = F),
+negval <- textGrob(label = sapply(strwrap("Less WPD Constriction in User", 
+                                          width = 15, simplify = F),
                                   paste, collapse = "\n"), rot = 0, 
                  gp = gpar(fontsize = 8))
 
@@ -2616,15 +2668,15 @@ Differences in Within Person Difference between Daily and Occassional Users
 f2_f1 <- (lpmat_dly - lpmat_occ) %*% wi_gam.coef
 f2_f1.se <- sqrt(diag((lpmat_dly - lpmat_occ) %*% wi_gam.cov %*% t((lpmat_dly - lpmat_occ))))
 
-f2_f1_diff_df <- data.frame(frame = seq(0, 400), 
+f2_f1_diff_df <- data.frame(seconds = seq(0, 400)/30, 
                             f2f1_diff = f2_f1, 
                             f2f1_se = f2_f1.se)
 
-wi_dlyocc_plt <- ggplot(data = f2_f1_diff_df, aes(x=frame, y = f2f1_diff))+
+wi_dlyocc_plt <- ggplot(data = f2_f1_diff_df, aes(x=seconds, y = f2f1_diff))+
                    geom_line()+
-                   geom_line(aes(x = frame, y = f2f1_diff + 2*f2f1_se), linetype = "longdash")+
-                   geom_line(aes(x = frame, y = f2f1_diff - 2*f2f1_se), linetype = "longdash")+
-                   geom_line(aes(x = frame, y = 0), col = "darkred")+
+                   geom_line(aes(x = seconds, y = f2f1_diff + 2*f2f1_se), linetype = "longdash")+
+                   geom_line(aes(x = seconds, y = f2f1_diff - 2*f2f1_se), linetype = "longdash")+
+                   geom_line(aes(x = seconds, y = 0), col = "darkred")+
                    labs(title = "Difference in WPD in Percent Change: Daily vs Occasional User", 
                         y = "")+
                    theme_bw()+
@@ -2633,10 +2685,12 @@ wi_dlyocc_plt <- ggplot(data = f2_f1_diff_df, aes(x=frame, y = f2f1_diff))+
 
 ylab <- textGrob(label = "Difference in WPD in Percent Change", rot = 90, 
                  gp = gpar(fontsize = 12))
-posval <- textGrob(label = sapply(strwrap("More Constriction in Daily User", width = 15, simplify = F),
+posval <- textGrob(label = sapply(strwrap("More Constriction in Daily User", 
+                                          width = 15, simplify = F),
                                   paste, collapse = "\n"), rot = 0, just = "bottom", 
                  gp = gpar(fontsize = 8))
-negval <- textGrob(label = sapply(strwrap("Less Constriction in Daily User", width = 15, simplify = F),
+negval <- textGrob(label = sapply(strwrap("Less Constriction in Daily User", 
+                                          width = 15, simplify = F),
                                   paste, collapse = "\n"), rot = 0, 
                  gp = gpar(fontsize = 8))
 
@@ -2731,7 +2785,7 @@ df_pred_smk <- data.frame("sind" = sort(unique(wi.smoker.gam.df$sind)), "smoker"
 
 lpmat_smk <- predict(wi_smoker_gam.fri, newdata=df_pred_smk, se.fit=TRUE, type = "lpmatrix")
 
-pred_df <- data.frame(frame = rep(seq(0, 400), 2),
+pred_df <- data.frame(seconds = rep(seq(0, 400), 2)/30,
                       user = c(rep("non-user", 401), rep("smoker", 401)), 
                       mean = c(lpmat_non %*% wi_smoker_gam.coef, 
                                lpmat_smk %*% wi_smoker_gam.coef), 
@@ -2745,7 +2799,7 @@ pred_df <- data.frame(frame = rep(seq(0, 400), 2),
 #   geom_line(aes(x=frame, y = mean - 2*se, group = user, col = user), linetype = "longdash")+
 #   theme_bw()
 
-wi_smkProfile <- ggplot(data = pred_df, aes(x = frame, y = mean, group = user, col = user))+
+wi_smkProfile <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
                    geom_line()+
                    scale_y_continuous(limits = c(min(pred_df$mean - 2*pred_df$se),
                                                  max(pred_df$mean+2*pred_df$se)))+
@@ -2754,10 +2808,12 @@ wi_smkProfile <- ggplot(data = pred_df, aes(x = frame, y = mean, group = user, c
 
 legend_smkProfile <- g_legend(wi_smkProfile)
 
-wi_smkProfile.se <- ggplot(data = pred_df, aes(x = frame, y = mean, group = user, col = user))+
+wi_smkProfile.se <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
                       geom_line()+
-                      geom_line(aes(x=frame, y = mean + 2*se, group = user, col = user), linetype = "longdash")+
-                      geom_line(aes(x=frame, y = mean - 2*se, group = user, col = user), linetype = "longdash")+
+                      geom_line(aes(x=seconds, y = mean + 2*se, group = user, col = user),
+                                linetype = "longdash")+
+                      geom_line(aes(x=seconds, y = mean - 2*se, group = user, col = user),
+                                linetype = "longdash")+
                       scale_y_continuous(limits = c(min(pred_df$mean - 2*pred_df$se),
                                                     max(pred_df$mean+2*pred_df$se)))+
                       labs(y = "")+
@@ -2781,7 +2837,7 @@ grid.arrange(post_smk, wi_smk, nrow = 2)
 # pred_f0 <- predict(post_smoker_gam.fri, newdata=df_pred_non, se.fit=TRUE, type = "iterms")
 pred_f1 <- predict(wi_smoker_gam.fri, newdata=df_pred_smk, se.fit=TRUE, type = "terms")
 
-pred_coef_df <- data.frame(frame = seq(0, 400),
+pred_coef_df <- data.frame(seconds = seq(0, 400)/30,
                            f0_hat = lpmat_non %*% wi_smoker_gam.coef, 
                            f0_se = sqrt(diag(lpmat_non %*% wi_smoker_gam.cov %*% t(lpmat_non))), 
                            f1_hat = pred_f1$fit[, 2], 
@@ -2794,11 +2850,11 @@ pred_coef_df <- data.frame(frame = seq(0, 400),
 #   labs(title = "Average Within Person Difference in Percent Change of a Non-user", ylab = "f0_hat")+
 #   theme_bw()
 
-wi_smk_plt <- ggplot(data = pred_coef_df, aes(x=frame, y = f1_hat))+
+wi_smk_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f1_hat))+
               geom_line()+
-              geom_line(aes(x = frame, y = f1_hat + 2*f1_se), linetype = "longdash")+
-              geom_line(aes(x = frame, y = f1_hat - 2*f1_se), linetype = "longdash")+
-              geom_line(aes(x = frame, y = 0), col = "darkred")+
+              geom_line(aes(x = seconds, y = f1_hat + 2*f1_se), linetype = "longdash")+
+              geom_line(aes(x = seconds, y = f1_hat - 2*f1_se), linetype = "longdash")+
+              geom_line(aes(x = seconds, y = 0), col = "darkred")+
               labs(title = "Difference in Within Person Difference (WPD) in Percent Change \nbetween Smoker and Non-smoker", 
                    y = "")+
               theme_bw()+
@@ -2807,10 +2863,12 @@ wi_smk_plt <- ggplot(data = pred_coef_df, aes(x=frame, y = f1_hat))+
 
 ylab <- textGrob(label = "Difference in WPD in Percent Change", rot = 90, 
                  gp = gpar(fontsize = 12))
-posval <- textGrob(label = sapply(strwrap("More WPD Constriction in User", width = 15, simplify = F),
+posval <- textGrob(label = sapply(strwrap("More WPD Constriction in User", 
+                                          width = 15, simplify = F),
                                   paste, collapse = "\n"), rot = 0, 
                  gp = gpar(fontsize = 8))
-negval <- textGrob(label = sapply(strwrap("Less WPD Constriction in User", width = 15, simplify = F),
+negval <- textGrob(label = sapply(strwrap("Less WPD Constriction in User", 
+                                          width = 15, simplify = F),
                                   paste, collapse = "\n"), rot = 0, 
                  gp = gpar(fontsize = 8))
 
@@ -2931,6 +2989,10 @@ left.corr.names <- left.names[4:length(left.names)]
 botheye.corr <- round(cor(botheyes[, right.corr.names[-1]], 
                           botheyes[, left.corr.names[-1]], use = "pairwise.complete.obs"), 3)
 
+
+corr_df <- data.frame(frame = seq(1, 400, by = 1), 
+                      btwEyeCor = diag(botheye.corr))
+
 # get_upper_tri <- function(cormat){
 #     cormat[lower.tri(cormat)]<- NA
 #     return(cormat)
@@ -2938,21 +3000,26 @@ botheye.corr <- round(cor(botheyes[, right.corr.names[-1]],
 # 
 # upper_tri <- get_upper_tri(botheye.corr)
 
-library(reshape2)
+# library(reshape2)
+# 
+# melted_cor_mat <- melt(botheye.corr)
+# names(melted_cor_mat) <- c("RightEye", "LeftEye", "value")
+# 
+# jpeg(file.path(res_folder, "Corr_Left_Right_Eyes.jpg"),
+#      height = 6, width = 15, res = 300, units = "in")
+# ggplot(data = melted_cor_mat, aes(RightEye, LeftEye, fill = value))+
+#  geom_tile()+
+#  scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
+#    midpoint = 0, limit = c(-0.2,1), space = "Lab", 
+#    name="Pearson\nCorrelation") +
+#   theme_bw()+ 
+#  theme(axis.text.x = element_blank(),
+#        axis.text.y = element_blank())+
+#  coord_fixed()
+# dev.off()
 
-melted_cor_mat <- melt(botheye.corr)
-names(melted_cor_mat) <- c("RightEye", "LeftEye", "value")
-
-jpeg(file.path(res_folder, "Corr_Left_Right_Eyes.jpg"),
-     height = 6, width = 15, res = 300, units = "in")
-ggplot(data = melted_cor_mat, aes(RightEye, LeftEye, fill = value))+
- geom_tile()+
- scale_fill_gradient2(low = "blue", high = "red", mid = "white", 
-   midpoint = 0, limit = c(-0.2,1), space = "Lab", 
-   name="Pearson\nCorrelation") +
-  theme_bw()+ 
- theme(axis.text.x = element_blank(),
-       axis.text.y = element_blank())+
- coord_fixed()
-dev.off()
+ggplot(data = corr_df, aes(frame, btwEyeCor))+
+  geom_point()+
+  scale_y_continuous(limits = c(0,1))+
+  theme_bw()
 ```
