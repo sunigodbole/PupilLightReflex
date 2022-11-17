@@ -351,7 +351,7 @@ summary(ps$lagPctChg[ps$frame > 150])
 
 hist(ps$lagPctChg[ps$frame > 150], breaks = 1000)
 
-ps.150 <- ps[ps$frame > 150  & ps$eye == "Right", ]
+ps.150 <- ps[ps$frame > 150  & ps$eye == "Left", ]
 
 pot.misaligned <- unique(ps.150[ps.150$lagPctChg <= -15,  c("subject_id", "time", "user_type", "eye")])
 pot.misaligned <- pot.misaligned[!(is.na(pot.misaligned$subject_id)), ]
@@ -361,7 +361,7 @@ misaligned <- merge(ps, pot.misaligned,
                     by= c("subject_id", "time", "user_type", "eye"), 
                     all.y = T)
 
-mis.right <- misaligned[misaligned$eye == "Right", ]
+mis.right <- misaligned[misaligned$eye == "Left", ]
 
 misAlign.id <- unique(misaligned$subject_id)
 
@@ -871,11 +871,11 @@ analytic.N <- intersect(analytic.N, unique(right_0.post.w$subject_id))
 analytic.N <- intersect(analytic.N, unique(right_0.df$subject_id))
 analytic.N <- intersect(analytic.N, unique(right_0.pt.w$subject_id))
 
-analytic_LR.N <- intersect(analytic.N, unique(left_0.post$subject_id))
-analytic_LR.N <- intersect(analytic.N, unique(left_0.post.w$subject_id))
-analytic_LR.N <- intersect(analytic.N, unique(left_0.pt$subject_id))
-analytic_LR.N <- intersect(analytic.N, unique(left_0.pt.w$subject_id))
+analytic_L.N <- intersect(unique(left_0.post.w$subject_id), unique(left_0.post$subject_id))
+analytic_L.N <- intersect(analytic.N, unique(left_0.pt$subject_id))
+analytic_L.N <- intersect(analytic.N, unique(left_0.pt.w$subject_id))
 
+analytic_LR.N <- intersect(analytic.N, analytic_L.N)
 
 ## Filter all datasets to analytic sample
 
@@ -2967,9 +2967,182 @@ ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = p
 
 ```
 
+## SoFR - prediction of smoker vs non-smoker
+```{r smk_right}
+smk.df <- pt.analytic.df[, c("subject_id", "user_cat")]
+smk.df$smoker <- ifelse(pt.analytic.df$user_cat %in% c("daily", "occasional"), 1, 0)
+
+Zsm <- post_right_0.fpca$Yhat
+sind <- seq(0, 1, len = 401)
+smat <- matrix(sind, nrow(smk.df), 401, byrow = T)
+
+smk.df$Zsm <- I(Zsm)
+smk.df$Zraw <- I(right_0.post.w)
+smk.df$smat <- I(smat)
+smk.df$lmat <- I(matrix(1/401, nrow(smk.df), 401))
+smk.df$zlmat <- I(smk.df$lmat * smk.df$Zsm)
+
+smk_fglm_ps <- gam(smoker ~ s(smat, by=zlmat, bs = "cr", k = 30), data=smk.df, 
+                   method = "REML", family = binomial)
+summary(smk_fglm_ps)
+
+roc_in_sample <- roc(smk.df$smoker, smk_fglm_ps$fitted.values)
+auc(roc_in_sample)
+```
 
 
-## Correlation between left and & right eyes
+
+## VAS based "high" vs "not in occasional smokers
+```{r vas_explore}
+hist(pt.analytic.df$vas[pt.analytic.df$user_cat == "daily"], breaks = 10)
+boxplot(vas ~ user_cat, data = pt.analytic.df)
+summary(pt.analytic.df$vas[pt.analytic.df$user_cat == "daily"])
+summary(pt.analytic.df$vas[pt.analytic.df$user_cat == "occasional"])
+sum(pt.analytic.df$vas[pt.analytic.df$user_cat == "occasional"] >= 60, na.rm = T)
+sum(pt.analytic.df$vas[pt.analytic.df$user_cat == "occasional"] < 60, na.rm = T)
+
+pt.analytic.df$vas_high <- NA
+pt.analytic.df$vas_high[pt.analytic.df$vas >= 60 & pt.analytic.df$user_cat == "occasional"] <- 1
+pt.analytic.df$vas_high[pt.analytic.df$vas < 60 & pt.analytic.df$user_cat == "occasional"] <- 0
+```
+
+### VAS FoSR
+```{r vas_fosr}
+right_0.vas.df <- merge(right_0.post, pt.analytic.df[!(is.na(pt.analytic.df$vas_high)), ], 
+                        by = c("subject_id", "user_cat"))
+
+right_0.vas.df <- right_0.vas.df[order(right_0.vas.df$subject_id, right_0.vas.df$frame), ]
+right_0.vas.df$sind <- right_0.vas.df$frame/400
+
+m.post_vas <- mgcv::gam(percent_change ~ s(sind, k=30, bs="cr") + s(sind, by=vas_high, k=30, bs = "cr"), 
+                  data = right_0.vas.df, method = "REML")
+
+## Create a matrix of residuals
+post_vas.resid <- cbind(right_0.vas.df[!(is.na(right_0.vas.df$percent_change)), c("subject_id", "frame")], m.post_vas$residuals)
+names(post_vas.resid) <- c("subject_id", "frame", "resid")
+post_vas.resid$frame_char <- str_pad(post_vas.resid$frame, width = 3, side = "left", pad = "0")
+
+resid_mat <- reshape(post_vas.resid[, c("subject_id", "frame_char", "resid")], 
+                     timevar = "frame_char", 
+                     idvar = "subject_id", 
+                     direction = "wide")
+rownames(resid_mat) <- resid_mat$subject_id
+resid_mat$subject_id <- NULL
+resid_names <- names(resid_mat)
+resid_names <- sort(resid_names)
+resid_mat <- resid_mat[, resid_names]
+
+resid_mat <- as.matrix(resid_mat)
+
+post_vas.fpca <- fpca.face(resid_mat, knots = 15)
+
+#Create data frame of eigen functions and attach to original data
+Phi_mat <- as.data.frame(post_vas.fpca$efunctions)
+colnames(Phi_mat) <- paste0("Phi", seq(1, post_vas.fpca$npc))
+Phi_mat$frame <- as.numeric(rownames(Phi_mat)) -1
+
+right_0.vas.df <- merge(right_0.vas.df, Phi_mat, 
+                        by = "frame", 
+                        all.x = T)
+right_0.vas.df <- right_0.vas.df[order(right_0.vas.df$subject_id, right_0.vas.df$frame), ]
+right_0.vas.df$subject_id <- as.factor(right_0.vas.df$subject_id)
+
+post_vas.fri <- mgcv::bam(percent_change ~ 
+                            s(sind, k=30, bs="cr") + 
+                            s(sind, by=vas_high, k=30, bs = "cr") + 
+                            s(subject_id, by = Phi1, bs="re") + s(subject_id, by = Phi2, bs="re")+
+                            s(subject_id, by = Phi3, bs="re") + s(subject_id, by = Phi4, bs="re"), 
+                          method = "fREML", data = right_0.vas.df, discrete = TRUE)
+
+
+summary(post_vas.fri)
+```
+
+### Plotting trajectory of occasional & daily user
+```{r plot_vas}
+post_vas.coef <- post_vas.fri$coefficients
+post_vas.cov <- vcov.gam(post_vas.fri)
+
+df_pred_non <- data.frame("sind" = unique(right_0.vas.df$sind), "vas_high" = 0,
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = right_0.vas.df$subject_id[1])
+
+lpmat_non <- predict(post_vas.fri, newdata=df_pred_non, se.fit=TRUE, type = "lpmatrix")
+
+
+df_pred_high <- data.frame("sind" = unique(right_0.vas.df$sind), "vas_high" = 1,  
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = right_0.vas.df$subject_id[1])
+
+lpmat_high <- predict(post_vas.fri, newdata=df_pred_high, se.fit=TRUE, type = "lpmatrix")
+
+
+pred_df <- data.frame(seconds = rep(seq(0, 400), 2)/30,
+                      user = c(rep("not high", 401), rep("high", 401)), 
+                      mean = c(lpmat_non %*% post_vas.coef, 
+                               lpmat_high %*% post_vas.coef), 
+                      se = c(sqrt(diag(lpmat_non %*% post_vas.cov %*% t(lpmat_non))), 
+                             sqrt(diag(lpmat_high %*% post_vas.cov %*% t(lpmat_high)))), 
+                      stringsAsFactors = F)
+
+post_vasProfile <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
+                    geom_line()+
+                    labs(y = "Percent Change")+
+                    theme_bw()
+
+legend_vasProfile <- g_legend(post_vasProfile)
+
+post_vasProfile.se <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
+                    geom_line()+
+                    geom_line(aes(x=seconds, y = mean + 2*se, group = user, col = user),
+                              linetype = "longdash")+
+                    geom_line(aes(x=seconds, y = mean - 2*se, group = user, col = user),
+                              linetype = "longdash")+
+                    labs(y = "")+
+                    theme_bw()
+                    
+post_vasTraj <- grid.arrange(arrangeGrob(post_vasProfile+theme(legend.position = "none"), 
+                                          post_vasProfile.se+theme(legend.position = "none"), nrow = 1), 
+                              legend_vasProfile, nrow = 1, 
+                              widths = c(30, 6))
+```
+
+
+### Effect for VAS "high" vs "not"
+```{r vas_coef_effect_plots}
+pred_f1 <- predict(post_vas.fri, newdata=df_pred_high, se.fit=TRUE, type = "terms")
+
+pred_coef_df <- data.frame(seconds = seq(0, 400)/30,
+                           f1_hat = pred_f1$fit[, 2], 
+                           f1_se = pred_f1$se.fit[, 2]) 
+
+post_high_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f1_hat))+
+                geom_line()+
+                geom_line(aes(x = seconds, y = f1_hat + 2*f1_se), linetype = "longdash")+
+                geom_line(aes(x = seconds, y = f1_hat - 2*f1_se), linetype = "longdash")+
+                geom_line(aes(x = seconds, y = 0), col = "darkred")+
+                labs(title = "Difference in Percent Change: VAS high vs not (Post)", ylab = "Percent Change")+
+                theme_bw()
+
+ylab <- textGrob(label = "Difference in Percent Change", rot = 90, 
+                 gp = gpar(fontsize = 12))
+posval <- textGrob(label = sapply(strwrap("Less Constriction in User", width = 15, simplify = F),
+                                  paste, collapse = "\n"), rot = 0, 
+                 gp = gpar(fontsize = 8))
+negval <- textGrob(label = sapply(strwrap("More Constriction in User", width = 15, simplify = F),
+                                  paste, collapse = "\n"), rot = 0, 
+                 gp = gpar(fontsize = 8))
+
+post_high_coef <- grid.arrange(ylab, posval, negval, post_high_plt, 
+                              ncol = 2, nrow = 2, 
+                              layout_matrix = rbind(c(1, 2, rep(4, 15)), c(1, 3, rep(4, 15))))
+
+post_high_coef
+```
+
+## Correlation between left and & right eyes - post
 ```{r eyeCorr}
 right_0.post.w2 <- right_0.post.w
 right.names <- names(right_0.post.w2)
@@ -3023,5 +3196,40 @@ corr_df <- data.frame(frame = seq(1, 400, by = 1),
 ggplot(data = corr_df, aes(frame, btwEyeCor))+
   geom_point()+
   scale_y_continuous(limits = c(0,1))+
+  labs(title = "Correlation between eyes -- POST")+
+  theme_bw()
+```
+
+## Correlation between left and & right eyes - wpd
+```{r wi_eyeCorr}
+right_0.pt.w2 <- right_0.pt.w
+right.names <- names(right_0.pt.w2)
+right.names <- c(right.names[1:2], paste0("R_", right.names[3:length(right.names)]))
+names(right_0.pt.w2) <- right.names
+
+left_0.pt.w2 <- left_0.pt.w
+left.names <- names(left_0.pt.w2)
+left.names <- c(left.names[1:2], paste0("L_", left.names[3:length(left.names)]))
+names(left_0.pt.w2) <- left.names
+
+
+wpd_botheyes <- merge(right_0.pt.w2, left_0.pt.w2, 
+                  by = c("subject_id", "user_cat"))
+
+right.corr.names <- right.names[3:length(right.names)]
+left.corr.names <- left.names[3:length(left.names)]
+
+wpd_botheye.corr <- round(cor(wpd_botheyes[, right.corr.names[-1]],
+                              wpd_botheyes[, left.corr.names[-1]], 
+                              use = "pairwise.complete.obs"), 3)
+
+
+wpd_corr_df <- data.frame(frame = seq(1, 400, by = 1), 
+                      btwEyeCor = diag(wpd_botheye.corr))
+
+ggplot(data = wpd_corr_df, aes(frame, btwEyeCor))+
+  geom_point()+
+  scale_y_continuous(limits = c(0,1))+
+  labs(title = "Correlation between eyes -- WPD")+
   theme_bw()
 ```
