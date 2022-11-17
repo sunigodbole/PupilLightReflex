@@ -138,13 +138,13 @@ library(haven)
 library(Hmisc)
 
 # ps_folder <- "C:/Repositories/Dissertation/PupilSize_img"
-data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
-# data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data" # Work laptop
+# data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
+data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data" # Work laptop
 # data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data"
 ps_folder <- "202208_PupilLightReflex"
 
-# res_folder <- "C:/Repository/FDA/PupilLightReflex/analysis" # Work Laptop
-res_folder <- "C:/Repositories/FDA/PupilLightReflex/analysis" # Home Laptop
+res_folder <- "C:/Repository/FDA/PupilLightReflex/analysis" # Work Laptop
+# res_folder <- "C:/Repositories/FDA/PupilLightReflex/analysis" # Home Laptop
 ```
 
 # Data Preparation
