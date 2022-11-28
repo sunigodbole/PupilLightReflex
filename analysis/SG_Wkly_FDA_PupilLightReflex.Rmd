@@ -909,6 +909,25 @@ right_0.pt.w <- right_0.pt.w[right_0.pt.w$subject_id %in% analytic.N, ]
 row.names(right_0.pt.w) <- right_0.pt.w$subject_id
 ```
 
+Send Merged dataset to Dr. Wrobel (20221128)
+```{r finDF, eval=FALSE}
+
+right_0.post <- merge(right_0.post, pt.df, 
+                      by = c("subject_id", "user_cat"))
+
+right_0.pt <- merge(right_0.pt, pt.df, 
+                      by = c("subject_id", "user_cat"))
+
+saveRDS(right_0.post, file.path(data_folder, ps_folder,
+                                "PupilLightReflex_POST_rightEye_20221128.rds"))
+
+saveRDS(right_0.pt, file.path(data_folder, ps_folder,
+                                "PupilLightReflex_WPD_rightEye_20221128.rds"))
+
+saveRDS(pt.df[pt.df$subject_id %in% analytic.N,], file.path(data_folder, ps_folder,
+                                "PupilLightReflex_PtData_20221128.rds"))
+
+```
 No Consumption end time recorded for non-users
 ```{r tab1_analyticN}
 # Demographics Table by User Category
