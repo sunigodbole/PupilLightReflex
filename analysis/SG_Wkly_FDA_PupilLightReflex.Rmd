@@ -838,7 +838,7 @@ rowsAllMissing <- names(allMissing)[allMissing == 401]
 right_0.pt.w <- right_0.pt.w[!(rownames(right_0.pt.w) %in% rowsAllMissing), ]
 
 ################################# ----------------------------- Left eye
-left_0.post <- ps[ps$time == "post" & ps$eye == "Left", ]
+left_0.post <- ps[ps$tp == "post" & ps$eye == "Left", ]
 left.post.ids <- unique(left_0.post$subject_id)
 
 left_0.post.w <- ps.w[ps.w$tp == "post" & ps.w$eye == "Left", ]
@@ -877,43 +877,65 @@ analytic_LR.N <- intersect(analytic.N, analytic_L.N)
 
 ## Filter all datasets to analytic sample
 
-left_0.df <- left_0.df[left_0.df$subject_id %in% analytic_LR.N,]
-left_0.df$seconds <- left_0.df$frame/30
 left_0.post <- left_0.post[left_0.post$subject_id %in% analytic_LR.N, ]
 left_0.post$seconds <- left_0.post$frame/30
-
 left_0.post.w <- left_0.post.w[left_0.post.w$subject_id %in% analytic_LR.N ,]
 row.names(left_0.post.w) <- left_0.post.w$subject_id
 
+left_0.post <- merge(left_0.post, pt.df[, c("subject_id", "user_cat")], 
+                     by = "subject_id", 
+                     all.x = T)
+left_0.post.w <- merge(left_0.post.w, pt.df[, c("subject_id", "user_cat")], 
+                     by = "subject_id", 
+                     all.x = T)
 
 left_0.pt <- left_0.pt[left_0.pt$subject_id %in% analytic_LR.N, ]
 left_0.pt$seconds <- left_0.pt$frame/30
 left_0.pt.w <- left_0.pt.w[left_0.pt.w$subject_id %in% analytic_LR.N, ]
 row.names(left_0.pt.w) <- left_0.pt.w$subject_id
 
-## Filter all datasets to analytic sample
+left_0.pt <- merge(left_0.pt, pt.df[, c("subject_id", "user_cat")], 
+                     by = "subject_id", 
+                     all.x = T)
+left_0.pt.w <- merge(left_0.pt.w, pt.df[, c("subject_id", "user_cat")], 
+                     by = "subject_id", 
+                     all.x = T)
 
-right_0.df <- right_0.df[right_0.df$subject_id %in% analytic.N,]
-right_0.df$seconds <- right_0.df$frame/30
+
+## Filter all datasets to analytic sample
 right_0.post <- right_0.post[right_0.post$subject_id %in% analytic.N, ]
 right_0.post$seconds <- right_0.post$frame/30
 right_0.post.w <- right_0.post.w[right_0.post.w$subject_id %in% analytic.N ,]
 row.names(right_0.post.w) <- right_0.post.w$subject_id
 
+right_0.post <- merge(right_0.post, pt.df[, c("subject_id", "user_cat")], 
+                     by = "subject_id", 
+                     all.x = T)
+right_0.post.w <- merge(right_0.post.w, pt.df[, c("subject_id", "user_cat")], 
+                     by = "subject_id", 
+                     all.x = T)
+
 right_0.pt <- right_0.pt[right_0.pt$subject_id %in% analytic.N, ]
 right_0.pt$seconds <- right_0.pt$frame/30
 right_0.pt.w <- right_0.pt.w[right_0.pt.w$subject_id %in% analytic.N, ]
 row.names(right_0.pt.w) <- right_0.pt.w$subject_id
+
+right_0.pt <- merge(right_0.pt, pt.df[, c("subject_id", "user_cat")], 
+                     by = "subject_id", 
+                     all.x = T)
+right_0.pt.w <- merge(right_0.pt.w, pt.df[, c("subject_id", "user_cat")], 
+                     by = "subject_id", 
+                     all.x = T)
+
 ```
 
 Send Merged dataset to Dr. Wrobel (20221128)
 ```{r finDF, eval=FALSE}
-
 right_0.post <- merge(right_0.post, pt.df, 
-                      by = c("subject_id", "user_cat"))
+                      by = "subject_id")
 
 right_0.pt <- merge(right_0.pt, pt.df, 
-                      by = c("subject_id", "user_cat"))
+                      by = "subject_id")
 
 saveRDS(right_0.post, file.path(data_folder, ps_folder,
                                 "PupilLightReflex_POST_rightEye_20221128.rds"))
@@ -925,6 +947,8 @@ saveRDS(pt.df[pt.df$subject_id %in% analytic.N,], file.path(data_folder, ps_fold
                                 "PupilLightReflex_PtData_20221128.rds"))
 
 ```
+
+
 No Consumption end time recorded for non-users
 ```{r tab1_analyticN}
 # Demographics Table by User Category
