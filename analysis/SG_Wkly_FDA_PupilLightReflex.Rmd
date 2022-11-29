@@ -889,6 +889,8 @@ left_0.post.w <- merge(left_0.post.w, pt.df[, c("subject_id", "user_cat")],
                      by = "subject_id", 
                      all.x = T)
 
+rownames(left_0.post.w) <- left_0.post.w$subject_id
+
 left_0.pt <- left_0.pt[left_0.pt$subject_id %in% analytic_LR.N, ]
 left_0.pt$seconds <- left_0.pt$frame/30
 left_0.pt.w <- left_0.pt.w[left_0.pt.w$subject_id %in% analytic_LR.N, ]
@@ -901,6 +903,7 @@ left_0.pt.w <- merge(left_0.pt.w, pt.df[, c("subject_id", "user_cat")],
                      by = "subject_id", 
                      all.x = T)
 
+rownames(left_0.pt.w) <- left_0.pt.w$subject_id
 
 ## Filter all datasets to analytic sample
 right_0.post <- right_0.post[right_0.post$subject_id %in% analytic.N, ]
@@ -914,6 +917,8 @@ right_0.post <- merge(right_0.post, pt.df[, c("subject_id", "user_cat")],
 right_0.post.w <- merge(right_0.post.w, pt.df[, c("subject_id", "user_cat")], 
                      by = "subject_id", 
                      all.x = T)
+
+rownames(right_0.post.w) <- right_0.post.w$subject_id
 
 right_0.pt <- right_0.pt[right_0.pt$subject_id %in% analytic.N, ]
 right_0.pt$seconds <- right_0.pt$frame/30
@@ -985,10 +990,10 @@ grid.arrange(post.user, wi.user, nrow = 1)
 
 ## Plot the mean and +/- 1 SD functions for within subject different in percent change
 ```{r wi_mean_fxn}
-mean_fxn.pt <- as.data.frame(aggregate(right_0.pt.w[, 3:403], 
+mean_fxn.pt <- as.data.frame(aggregate(right_0.pt.w[, 2:402], 
                                     list(right_0.pt.w$user_cat),
                                     FUN = function(x) mean(x, na.rm = T)))
-wiPctChg <- names(right_0.pt.w)[3:403]
+wiPctChg <- names(right_0.pt.w)[2:402]
 
 mean_fxn.pt.l <- reshape(mean_fxn.pt, 
                       varying = wiPctChg, 
@@ -1016,10 +1021,10 @@ ggplot(mean_fxn.pt.l, aes(x=frame/30, y = wi_percent_change, group = user_cat, c
 # Check to make sure there are significant numbers in each user category
 table(right_0.pt.w$user_cat)
 
-sd_fxn.pt <- as.data.frame(aggregate(right_0.pt.w[, 3:403], 
+sd_fxn.pt <- as.data.frame(aggregate(right_0.pt.w[, 2:402], 
                                     list(right_0.pt.w$user_cat),
                                     FUN = function(x) sd(x, na.rm = T)))
-wiPctChg <- names(right_0.pt.w)[3:403]
+wiPctChg <- names(right_0.pt.w)[2:402]
 
 sd_fxn.pt.l <- reshape(sd_fxn.pt, 
                       varying = wiPctChg, 
@@ -1048,7 +1053,7 @@ ggplot(sd_fxn.pt.l, aes(x=frame/30, y = wi_percent_change, group = user_cat, col
 
 ```{r missingness_wiSubj}
 ## number of missing data points in each column
-missingnessCol <- apply(right_0.pt.w[, 3:403], 
+missingnessCol <- apply(right_0.pt.w[, 2:402], 
                         MARGIN = 2, 
                         FUN = function(x) sum(is.na(x)))
 
@@ -1069,7 +1074,7 @@ Truncate within person difference data to frame 400 where missingness reaches 50
 Try to visualize missing data in within person data frame
 ```{r visMissing}
 
-wi_pct_chg <- names(right_0.pt.w)[3:403]
+wi_pct_chg <- names(right_0.pt.w)[2:402]
 
 right_0.pt.l <- reshape(right_0.pt.w,
                         varying = wi_pct_chg,
@@ -1095,7 +1100,7 @@ ggplot(right_0.pt.l, aes(x = as.factor(frame), y = subject_id, fill = as.factor(
 
 ### fPCA Within Person Differences
 ```{r fPCA_withinPersonChange, fig.width = 20, fig.height=8}
-right_0_wi.fpca <- fpca.face(Y = as.matrix(right_0.pt.w[, 3:403]), pve = 0.95, knots = 30, var = T)
+right_0_wi.fpca <- fpca.face(Y = as.matrix(right_0.pt.w[, 2:402]), pve = 0.95, knots = 30, var = T)
 # str(right_0.fpca)
 
 # plot_shiny(right_0.fpca)
@@ -1291,7 +1296,7 @@ ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   theme_bw()
 
 for(i in pctile95.wi){
-  print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
+  print(ggplot(data = right_0.post[right_0.post$subject_id == i, ], 
                aes(x = seconds, y = percent_change, group = tp, color = tp))+
   geom_line()+
   labs(title = paste0(i, " Pre/Post: Top 5th Percentile PC1 scores"))+
@@ -1317,7 +1322,7 @@ ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   theme_bw()
 
 for(i in pctile05.wi){
-  print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
+  print(ggplot(data = right_0.post[right_0.post$subject_id == i, ], 
                aes(x = seconds, y = percent_change, group = tp, color = tp))+
   geom_line()+
   labs(title = paste0(i, " Pre/Post: 5th Percentile PC1 scores"))+
@@ -1348,7 +1353,7 @@ ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   theme_bw()
 
 for(i in pctile95.wi){
-  print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
+  print(ggplot(data = right_0.post[right_0.post$subject_id == i, ], 
                aes(x = seconds, y = percent_change, group = tp, color = tp))+
   geom_line()+
   labs(title = paste0(i, " Pre/Post: Top 5th Percentile PC2 scores"))+
@@ -1374,7 +1379,7 @@ ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   theme_bw()
 
 for(i in pctile05.wi){
-  print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
+  print(ggplot(data = right_0.post[right_0.post$subject_id == i, ], 
                aes(x = seconds, y = percent_change, group = tp, color = tp))+
   geom_line()+
   labs(title = paste0(i, " Pre/Post: 5th Percentile PC2 scores"))+
@@ -1403,7 +1408,7 @@ ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   theme_bw()
 
 for(i in pctile95.wi){
-  print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
+  print(ggplot(data = right_0.post[right_0.post$subject_id == i, ], 
                aes(x = seconds, y = percent_change, group = tp, color = tp))+
   geom_line()+
   labs(title = paste0(i, " Pre/Post: Top 5th Percentile PC3 scores"))+
@@ -1429,7 +1434,7 @@ ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   theme_bw()
 
 for(i in pctile05.wi){
-  print(ggplot(data = right_0.df[right_0.df$subject_id == i, ], 
+  print(ggplot(data = right_0.post[right_0.post$subject_id == i, ], 
                aes(x = seconds, y = percent_change, group = tp, color = tp))+
   geom_line()+
   labs(title = paste0(i, " Pre/Post: 5th Percentile PC3 scores"))+
