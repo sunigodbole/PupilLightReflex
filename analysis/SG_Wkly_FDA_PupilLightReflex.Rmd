@@ -3114,6 +3114,24 @@ pt.analytic.df$vas_high[pt.analytic.df$vas1_high_score < 46 &
                           pt.analytic.df$user_cat == "occasional"] <- 0
 ```
 
+### VAS scatterplot of pt of min constriction and VAS
+```{r plot_VAS_minConstrict}
+post_vas_minConstrict_occ <- ggplot(data = pt.analytic.df[pt.analytic.df$user_cat == "occasional", ], aes(x = vas1_high_score, y = min_constriction.post))+
+                             geom_point()+
+                             labs(title = "POST VAS Feel High Score vs POST minimal Constriction \nin Occasional Users")+
+                             theme_bw()
+
+chg_vas_minConstrict_occ <- ggplot(data = pt.analytic.df[pt.analytic.df$user_cat == "occasional", ], aes(x = vas1_high_score, y = min_constriction_chg))+
+                            geom_point()+
+                            labs(title = "POST VAS Feel High Score vs Change in minimal Constriction (post-pre) \nin Occasional Users")+
+                            theme_bw()
+
+jpeg(file.path(res_folder, "Scatterplot_VAS_MinConstriction.jpg"),
+     height = 6, width = 15, res = 300, units = "in")
+grid.arrange(post_vas_minConstrict_occ , chg_vas_minConstrict_occ, nrow = 1)
+dev.off()
+```
+
 ### VAS FoSR
 ```{r vas_fosr}
 right_0.vas.df <- merge(right_0.post, pt.analytic.df[!(is.na(pt.analytic.df$vas_high)), ], 
