@@ -940,8 +940,6 @@ right_0.pt <- right_0.pt[right_0.pt$subject_id %in% analytic.N, ]
 right_0.pt$seconds <- right_0.pt$frame/30
 right_0.pt.w <- right_0.pt.w[right_0.pt.w$subject_id %in% analytic.N, ]
 
-row.names(right_0.pt.w) <- right_0.pt.w$subject_id
-
 right_0.pt <- merge(right_0.pt, pt.df[, c("subject_id", "user_cat")], 
                      by = "subject_id", 
                      all.x = T)
@@ -949,6 +947,7 @@ right_0.pt.w <- merge(right_0.pt.w, pt.df[, c("subject_id", "user_cat")],
                      by = "subject_id", 
                      all.x = T)
 
+rownames(right_0.pt.w) <- right_0.pt.w$subject_id
 ```
 
 Send Merged dataset to Dr. Wrobel (20221128)
@@ -3274,20 +3273,20 @@ post_high_coef
 ```{r eyeCorr}
 right_0.post.w2 <- right_0.post.w
 right.names <- names(right_0.post.w2)
-right.names <- c(right.names[1:3], paste0("R_", right.names[4:length(right.names)]))
+right.names <- c(right.names[1:3], paste0("R_", right.names[4:(length(right.names)-1)]), right.names[length(right.names)])
 names(right_0.post.w2) <- right.names
 
 left_0.post.w2 <- left_0.post.w
 left.names <- names(left_0.post.w2)
-left.names <- c(left.names[1:3], paste0("L_", left.names[4:length(left.names)]))
+left.names <- c(left.names[1:3], paste0("L_", left.names[4:(length(left.names)-1)]), left.names[length(left.names)]) 
 names(left_0.post.w2) <- left.names
 
 
 botheyes <- merge(right_0.post.w2, left_0.post.w2, 
                   by = c("subject_id", "tp", "user_cat"))
 
-right.corr.names <- right.names[4:length(right.names)]
-left.corr.names <- left.names[4:length(left.names)]
+right.corr.names <- right.names[4:(length(right.names)-1)]
+left.corr.names <- left.names[4:(length(left.names)-1)]
 
 botheye.corr <- round(cor(botheyes[, right.corr.names[-1]], 
                           botheyes[, left.corr.names[-1]], use = "pairwise.complete.obs"), 3)
@@ -3332,23 +3331,23 @@ ggplot(data = corr_df, aes(frame, btwEyeCor))+
 ```{r wi_eyeCorr}
 right_0.pt.w2 <- right_0.pt.w
 right.names <- names(right_0.pt.w2)
-right.names <- c(right.names[1:2], paste0("R_", right.names[3:length(right.names)]))
+right.names <- c(right.names[1:2], paste0("R_", right.names[3:(length(right.names)-1)]), right.names[length(right.names)])
 names(right_0.pt.w2) <- right.names
 
 left_0.pt.w2 <- left_0.pt.w
 left.names <- names(left_0.pt.w2)
-left.names <- c(left.names[1:2], paste0("L_", left.names[3:length(left.names)]))
+left.names <- c(left.names[1:2], paste0("L_", left.names[3:(length(left.names)-1)]), left.names[length(left.names)])
 names(left_0.pt.w2) <- left.names
 
 
 wpd_botheyes <- merge(right_0.pt.w2, left_0.pt.w2, 
                   by = c("subject_id", "user_cat"))
 
-right.corr.names <- right.names[3:length(right.names)]
-left.corr.names <- left.names[3:length(left.names)]
+right.corr.names <- right.names[3:(length(right.names)-1)]
+left.corr.names <- left.names[3:(length(left.names)-1)]
 
-wpd_botheye.corr <- round(cor(wpd_botheyes[, right.corr.names[-1]],
-                              wpd_botheyes[, left.corr.names[-1]], 
+wpd_botheye.corr <- round(cor(wpd_botheyes[, right.corr.names],
+                              wpd_botheyes[, left.corr.names], 
                               use = "pairwise.complete.obs"), 3)
 
 
@@ -3366,10 +3365,10 @@ ggplot(data = wpd_corr_df, aes(frame, btwEyeCor))+
 ### Post -- Interaction with Post Consumption Time to Test (PCTT)
 $$ 
 \begin{aligned}
-Y_{i}(t) &= f_0(t) + f_1(t)*I(user = occasional)*PCTT + f_2(t)*I(user = daily)*PCTT + b_i(t) + \epsilon_i(t)\\
+Y_{i}(t) &= f_0(t) + f_1(t)*I(user = occasional) + f_2(t)*I(user = daily) +f_3(t)*I(user = occasional)*PCTT + f_4(t)*I(user = daily)*PCTT + b_i(t) + \epsilon_i(t)\\
 & b_i(t) \sim GP(0, \Sigma_b) \\
 & \epsilon_i(t) \sim N(0, \sigma_{\epsilon}^2) \\
-&= \sum_{k=1}^K \xi_{0k}\phi_{0k}(t_i) + \sum_{k=1}^K \xi_{1k}\phi_{1k}(t_i)*I(user = occasional)*PCTT + \sum_{k=1}^K \xi_{2k}\phi_{2k}(t_i)*I(user = daily)*PCTT + \sum_{k=1}^K \xi_{ik}\phi_k(t_i) + \epsilon_i(t)\\
+&= \sum_{k=1}^K \xi_{0k}\phi_{0k}(t_i) + \sum_{k=1}^K \xi_{1k}\phi_{1k}(t_i)*I(user = occasional) + \sum_{k=1}^K \xi_{2k}\phi_{2k}(t_i)*I(user = daily)\\ &+ \sum_{k=1}^K \xi_{3k}\phi_{3k}(t_i)*I(user = occasional)*PCTT + \sum_{k=1}^K \xi_{4k}\phi_{4k}(t_i)*I(user = daily)*PCTT + \sum_{k=1}^K \xi_{ik}\phi_k(t_i) + \epsilon_i(t)\\
 \end{aligned}
 $$
 
@@ -3443,7 +3442,7 @@ summary(post_intPCTT_gam.fri)
 ```
 
 ### Plotting trajectory of occasional & daily user
-```{r plot_occ_intPCTT}
+```{r plot_occ_intPCTT, eval=F}
 post_gam.coef <- post_gam.fri$coefficients
 post_gam.cov <- vcov.gam(post_gam.fri)
 
@@ -3502,7 +3501,7 @@ post_userTraj <- grid.arrange(arrangeGrob(post_userProfile+theme(legend.position
 ```
 
 
-```{r coef_effect_plots_intPCTT}
+```{r coef_effect_plots_intPCTT, eval=F}
 pred_f1 <- predict(post_gam.fri, newdata=df_pred_occ, se.fit=TRUE, type = "terms")
 pred_f2 <- predict(post_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "terms")
 
@@ -3564,7 +3563,7 @@ post_dly_coef <- grid.arrange(ylab, posval, negval, post_dly_plt,
 
 Plot difference between daily and occasional user
 
-```{r diff_dly_occ_intPCTT}
+```{r diff_dly_occ_intPCTT, eval=F}
 f2_f1 <- (lpmat_dly - lpmat_occ) %*% post_gam.coef
 f2_f1.se <- sqrt(diag((lpmat_dly - lpmat_occ) %*% post_gam.cov %*% t((lpmat_dly - lpmat_occ))))
 
