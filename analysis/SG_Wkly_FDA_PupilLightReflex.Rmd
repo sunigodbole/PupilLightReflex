@@ -295,7 +295,7 @@ non_user.id <- pt.df$subject_id[pt.df$user_cat == "non-user"]
 ```
 
 Add VAS data
-```{r vasReadIn}
+```{r vasReadIn, eval = F}
 vs <- read_sas(file.path(data_folder, ps_folder, "urban102.sas7bdat"))
 
 vs <- vs[, c("subject_id", "period", "vas")]
@@ -329,13 +329,29 @@ ps <- merge(ps, vas.w,
             all.x = T)
 ```
 
+```{r vasReadIn2}
+vs <- read.xlsx(file.path(data_folder, ps_folder, 
+                         "All CDPHE VAS Scores_30Nov2022.xlsx"), 
+                sheet = "VAS")
+### Data Dictionary
+# "subject_id"
+# "vas0_high_score" -- vas score for how high you feel at pre
+# "vas0_score_dc" -- how confident you feel about driving at pre
+# "vas1_high_score" -- vas score for how high you feel at post
+# "vas1_score_dc" -- how confident you feel about driving at post
 
+pt.df <- merge (pt.df, vs, 
+                by = "subject_id", 
+                all.x = T)
+pt.df$vas_high_score_chg <- pt.df$vas1_high_score - pt.df$vas0_high_score
+pt.df$vas_score_dc_chg <- pt.df$vas1_score_dc - pt.df$vas0_score_dc
+```
 
 ## Table 1
 No Consumption end time recorded for non-users
 ```{r tab1}
 # Demographics Table by User Category
-table1(~ demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + Post_PreTime + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg + vas|user_cat, 
+table1(~ demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + Post_PreTime + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg + vas1_high_score + vas_high_score_chg + vas1_score_dc + vas_score_dc_chg|user_cat, 
        data = pt.df)
 ```
 
@@ -923,6 +939,7 @@ rownames(right_0.post.w) <- right_0.post.w$subject_id
 right_0.pt <- right_0.pt[right_0.pt$subject_id %in% analytic.N, ]
 right_0.pt$seconds <- right_0.pt$frame/30
 right_0.pt.w <- right_0.pt.w[right_0.pt.w$subject_id %in% analytic.N, ]
+
 row.names(right_0.pt.w) <- right_0.pt.w$subject_id
 
 right_0.pt <- merge(right_0.pt, pt.df[, c("subject_id", "user_cat")], 
@@ -957,7 +974,7 @@ saveRDS(pt.df[pt.df$subject_id %in% analytic.N,], file.path(data_folder, ps_fold
 No Consumption end time recorded for non-users
 ```{r tab1_analyticN}
 # Demographics Table by User Category
-table1(~demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + Post_PreTime + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg +vas|user_cat, 
+table1(~demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + Post_PreTime + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg +vas1_high_score + vas_high_score_chg + vas1_score_dc + vas_score_dc_chg|user_cat, 
        data = pt.df[pt.df$subject_id %in% analytic.N, ])
 ```
 
@@ -1094,6 +1111,9 @@ ggplot(right_0.pt.l, aes(x = as.factor(frame), y = subject_id, fill = as.factor(
   geom_raster(alpha = 0.8)+
   scale_fill_manual(values = c("black", 'white'), 
                     labels = c("Missing", "Present"))+
+  scale_x_discrete(breaks = seq(0, 400, by = 25))+
+  geom_vline(xintercept = 350,color = "darkred")+
+  geom_vline(xintercept = 375,color = "darkblue")+
   theme(axis.text.x=element_text(angle = 45, vjust = 1, hjust = 1))
 ```
 
@@ -2110,28 +2130,32 @@ pt.analytic.df <- pt.analytic.df[order(pt.analytic.df$subject_id), ]
 right_0.gam.df <- merge(right_0.post, pt.analytic.df, 
                         by = c("subject_id", "user_cat"))
 
-right_0.gam.df <- right_0.gam.df[order(right_0.gam.df$subject_id, right_0.gam.df$frame), ]
+# right_0.gam.df <- right_0.gam.df[order(right_0.gam.df$subject_id, right_0.gam.df$frame), ]
 right_0.gam.df$sind <- right_0.gam.df$frame/400
 
 # head(right_0.gam.df)
 
-m.post_gam <- mgcv::gam(percent_change ~ s(sind, k=30, bs="cr") + s(sind, by=occasional, k=30, bs = "cr") + s(sind, by=daily, k=30, bs = "cr"), 
+m.post_gam <- mgcv::gam(percent_change ~ s(sind, k=30, bs="cr") + 
+                          s(sind, by=occasional, k=30, bs = "cr") + 
+                          s(sind, by=daily, k=30, bs = "cr"), 
                   data = right_0.gam.df, method = "REML")
 
 ## Create a matrix of residuals
-post_gam.resid <- cbind(right_0.gam.df[!(is.na(right_0.gam.df$percent_change)), c("subject_id", "frame")], m.post_gam$residuals)
+post_gam.resid <- cbind(right_0.gam.df[!(is.na(right_0.gam.df$percent_change)), 
+                                       c("subject_id", "frame")], 
+                        m.post_gam$residuals)
 names(post_gam.resid) <- c("subject_id", "frame", "resid")
-post_gam.resid$frame_char <- str_pad(post_gam.resid$frame, width = 3, side = "left", pad = "0")
+# post_gam.resid$frame_char <- str_pad(post_gam.resid$frame, width = 3, side = "left", pad = "0")
 
-resid_mat <- reshape(post_gam.resid[, c("subject_id", "frame_char", "resid")], 
-                     timevar = "frame_char", 
+resid_mat <- reshape(post_gam.resid[, c("subject_id", "frame", "resid")], 
+                     timevar = "frame", 
                      idvar = "subject_id", 
                      direction = "wide")
 rownames(resid_mat) <- resid_mat$subject_id
 resid_mat$subject_id <- NULL
-resid_names <- names(resid_mat)
-resid_names <- sort(resid_names)
-resid_mat <- resid_mat[, resid_names]
+# resid_names <- names(resid_mat)
+# resid_names <- sort(resid_names)
+# resid_mat <- resid_mat[, resid_names]
 
 resid_mat <- as.matrix(resid_mat)
 
@@ -2340,21 +2364,24 @@ m.post_smoker_gam <- mgcv::gam(percent_change ~ s(sind, k=30, bs="cr") +
                   data = smoker.gam.df, method = "REML")
 
 ## Create a matrix of residuals
-post_smoker_gam.resid <- cbind(smoker.gam.df[!(is.na(smoker.gam.df$percent_change)), c("subject_id", "frame")], m.post_smoker_gam$residuals)
+post_smoker_gam.resid <- cbind(smoker.gam.df[!(is.na(smoker.gam.df$percent_change)), 
+                                             c("subject_id", "frame")], 
+                               m.post_smoker_gam$residuals)
 names(post_smoker_gam.resid) <- c("subject_id", "frame", "resid")
 
-post_smoker_gam.resid$frame_char <- str_pad(post_smoker_gam.resid$frame, width = 3, side = "left", pad = "0")
+# post_smoker_gam.resid$frame_char <- str_pad(post_smoker_gam.resid$frame, 
+#                                             width = 3, side = "left", pad = "0")
 
-resid_mat <- reshape(post_smoker_gam.resid[, c("subject_id", "frame_char", "resid")], 
-                     timevar = "frame_char", 
+resid_mat <- reshape(post_smoker_gam.resid[, c("subject_id", "frame", "resid")], 
+                     timevar = "frame", 
                      idvar = "subject_id", 
                      direction = "wide")
 
 rownames(resid_mat) <- resid_mat$subject_id
 resid_mat$subject_id <- NULL
-resid_names <- names(resid_mat)
-resid_names <- sort(resid_names)
-resid_mat <- resid_mat[, resid_names]
+# resid_names <- names(resid_mat)
+# resid_names <- sort(resid_names)
+# resid_mat <- resid_mat[, resid_names]
 
 resid_mat <- as.matrix(resid_mat)
 
@@ -2503,26 +2530,30 @@ right_0.pt.gam.df <- merge(right_0.pt, pt.analytic.df,
 right_0.pt.gam.df$sind <- right_0.pt.gam.df$frame/400
 
 
-m.wi_gam <- mgcv::gam(wiPctChg ~ s(sind, k=30, bs="cr") + s(sind, by=occasional, k=30, bs = "cr") + s(sind, by=daily, k=30, bs = "cr"), 
+m.wi_gam <- mgcv::gam(wiPctChg ~ s(sind, k=30, bs="cr") + 
+                        s(sind, by=occasional, k=30, bs = "cr") + 
+                        s(sind, by=daily, k=30, bs = "cr"), 
                   data = right_0.pt.gam.df, method = "REML")
 
 
 ## Create a matrix of residuals
-wi_gam.resid <- cbind(right_0.pt.gam.df[!(is.na(right_0.pt.gam.df$wiPctChg)), c("subject_id", "frame")], m.wi_gam$residuals)
+wi_gam.resid <- cbind(right_0.pt.gam.df[!(is.na(right_0.pt.gam.df$wiPctChg)), 
+                                        c("subject_id", "frame")], 
+                      m.wi_gam$residuals)
 names(wi_gam.resid) <- c("subject_id", "frame", "resid")
 
-wi_gam.resid$frame_char <- str_pad(wi_gam.resid$frame, width = 3, side = "left", pad = "0")
+# wi_gam.resid$frame_char <- str_pad(wi_gam.resid$frame, width = 3, side = "left", pad = "0")
 
 
-resid_mat <- reshape(wi_gam.resid[, c("subject_id", "frame_char", "resid")],
-                     timevar = "frame_char",
+resid_mat <- reshape(wi_gam.resid[, c("subject_id", "frame", "resid")],
+                     timevar = "frame",
                      idvar = "subject_id",
                      direction = "wide")
 rownames(resid_mat) <- resid_mat$subject_id
 resid_mat$subject_id <- NULL
-resid_names <- names(resid_mat)
-resid_names <- sort(resid_names)
-resid_mat <- resid_mat[, resid_names]
+# resid_names <- names(resid_mat)
+# resid_names <- sort(resid_names)
+# resid_mat <- resid_mat[, resid_names]
 resid_mat <- as.matrix(resid_mat)
 
 wi_gam.fpca <- fpca.face(resid_mat, knots = 15)
@@ -2536,7 +2567,8 @@ Phi_mat$frame <- as.numeric(rownames(Phi_mat)) -1
 right_0.pt.gam.df <- merge(right_0.pt.gam.df, Phi_mat,
                         by = "frame",
                         all.x = T)
-right_0.pt.gam.df <- right_0.pt.gam.df[order(right_0.pt.gam.df$subject_id, right_0.pt.gam.df$frame), ]
+# right_0.pt.gam.df <- right_0.pt.gam.df[order(right_0.pt.gam.df$subject_id, 
+#                                              right_0.pt.gam.df$frame), ]
 right_0.pt.gam.df$subject_id <- as.factor(right_0.pt.gam.df$subject_id)
 
 wi_gam.fri <- mgcv::bam(wiPctChg ~ s(sind, k=30, bs="cr") + 
@@ -2769,21 +2801,24 @@ m.wi_smoker_gam <- mgcv::gam(wiPctChg ~ s(sind, k=15, bs="cr") +
                   data = wi.smoker.gam.df, method = "REML")
 
 ## Create a matrix of residuals
-wi_smoker_gam.resid <- cbind(wi.smoker.gam.df[!(is.na(wi.smoker.gam.df$wiPctChg)), c("subject_id", "frame")], m.wi_smoker_gam$residuals)
+wi_smoker_gam.resid <- cbind(wi.smoker.gam.df[!(is.na(wi.smoker.gam.df$wiPctChg)), 
+                                              c("subject_id", "frame")], 
+                             m.wi_smoker_gam$residuals)
 names(wi_smoker_gam.resid) <- c("subject_id", "frame", "resid")
 
-wi_smoker_gam.resid$frame_char <- str_pad(wi_smoker_gam.resid$frame, width = 3, side = "left", pad = "0")
+# wi_smoker_gam.resid$frame_char <- str_pad(wi_smoker_gam.resid$frame, 
+#                                           width = 3, side = "left", pad = "0")
 
-resid_mat <- reshape(wi_smoker_gam.resid[, c("subject_id", "frame_char", "resid")], 
-                     timevar = "frame_char", 
+resid_mat <- reshape(wi_smoker_gam.resid[, c("subject_id", "frame", "resid")], 
+                     timevar = "frame", 
                      idvar = "subject_id", 
                      direction = "wide")
 
 rownames(resid_mat) <- resid_mat$subject_id
 resid_mat$subject_id <- NULL
-resid_names <- names(resid_mat)
-resid_names <- sort(resid_names)
-resid_mat <- resid_mat[, resid_names]
+# resid_names <- names(resid_mat)
+# resid_names <- sort(resid_names)
+# resid_mat <- resid_mat[, resid_names]
 
 resid_mat <- as.matrix(resid_mat)
 
@@ -2935,7 +2970,6 @@ grid.arrange(post_smk_coef , wi_smk_coef, nrow = 1)
 ```
 ## Time from consumption to post test
 ```{r timepostconsump}
-
 wi.consump.m <- lm(postConsumpTimeToTest ~ PC1 + PC2 + PC3 + PC4 + PC5 + PC6, data = pt.wi.scores)
 summary(wi.consump.m)
 
@@ -2964,19 +2998,34 @@ table1(~ postConsumpTimeToTest + Post_PreTime|user_cat,
 
 by(pt.analytic.df$postConsumpTimeToTest, INDICES = list(pt.analytic.df$user_cat), summary)
 
-postConsump.cor <- cor(pt.analytic.df$postConsumpTimeToTest, pt.analytic.df[, c("demo_age", "demo_weight", "demo_height", "BMI",
-                                                             "thc.post", "min_constriction.post", "slope.post", "AUC.post",
-                                                             "thc_chg", "min_constriction_chg", "AUC_chg",
-                                                             "wpd.PC1", "wpd.PC2", "wpd.PC3", "wpd.PC4", "wpd.PC5", "wpd.PC6", 
-                                                             "post.PC1", "post.PC2", "post.PC3", "post.PC4",
-                                                             "vas", "Post_PreTime")], use = "pairwise.complete.obs")
+postConsump.cor <- cor(pt.analytic.df$postConsumpTimeToTest, 
+                       pt.analytic.df[, c("demo_age", "demo_weight", "demo_height", "BMI",
+                                          "thc.post", "min_constriction.post", "slope.post",
+                                          "AUC.post", "thc_chg", "min_constriction_chg",
+                                          "AUC_chg", "wpd.PC1", "wpd.PC2", "wpd.PC3",
+                                          "wpd.PC4", "wpd.PC5", "wpd.PC6", 
+                                          "post.PC1", "post.PC2", "post.PC3", "post.PC4",
+                                          "vas1_high_score", "vas_high_score_chg", 
+                                          "vas1_score_dc", "vas_score_dc_chg",
+                                          "Post_PreTime")], 
+                       use = "pairwise.complete.obs")
 
-postConsump.rcorr <- rcorr(as.matrix(pt.analytic.df[, c("postConsumpTimeToTest", "demo_age", "demo_weight", "demo_height", "BMI",
-                                                        "thc.post", "min_constriction.post", "slope.post", "AUC.post",
-                                                        "thc_chg", "min_constriction_chg", "AUC_chg",
-                                                        "wpd.PC1", "wpd.PC2", "wpd.PC3", "wpd.PC4", "wpd.PC5", "wpd.PC6", 
-                                                        "post.PC1", "post.PC2", "post.PC3", "post.PC4",
-                                                        "vas", "Post_PreTime")]))
+postConsump.rcorr <- rcorr(as.matrix(pt.analytic.df[, c("postConsumpTimeToTest",
+                                                        "demo_age", "demo_weight",
+                                                        "demo_height", "BMI",
+                                                        "thc.post", "min_constriction.post",
+                                                        "slope.post", "AUC.post",
+                                                        "thc_chg", "min_constriction_chg",
+                                                        "AUC_chg",
+                                                        "wpd.PC1", "wpd.PC2", "wpd.PC3",
+                                                        "wpd.PC4", "wpd.PC5", "wpd.PC6",
+                                                        "post.PC1", "post.PC2", 
+                                                        "post.PC3", "post.PC4",
+                                                        "vas1_high_score", 
+                                                        "vas_high_score_chg",
+                                                        "vas1_score_dc", 
+                                                        "vas_score_dc_chg", 
+                                                        "Post_PreTime")]))
 
 postConsump.cor.df <- data.frame(postConsump_rho = postConsump.rcorr$r[, 1], 
                                  postConsump_p = postConsump.rcorr$P[, 1], 
@@ -3018,21 +3067,25 @@ ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = p
 smk.df <- pt.analytic.df[, c("subject_id", "user_cat")]
 smk.df$smoker <- ifelse(pt.analytic.df$user_cat %in% c("daily", "occasional"), 1, 0)
 
-Zsm <- post_right_0.fpca$Yhat
-sind <- seq(0, 1, len = 401)
-smat <- matrix(sind, nrow(smk.df), 401, byrow = T)
+# Zsm <- post_right_0.fpca$Yhat
 
-smk.df$Zsm <- I(Zsm)
-smk.df$Zraw <- I(right_0.post.w)
+pctChg_names <- names(right_0.post.w)[4:379]
+sofr_right_post <-  right_0.post.w[, pctChg_names]
+
+sind <- seq(0, 1, len = 376)
+smat <- matrix(sind, nrow(smk.df), 376, byrow = T)
+
+# smk.df$Zsm <- I(Zsm)
+smk.df$Zraw <- I(as.matrix(sofr_right_post))
 smk.df$smat <- I(smat)
-smk.df$lmat <- I(matrix(1/401, nrow(smk.df), 401))
-smk.df$zlmat <- I(smk.df$lmat * smk.df$Zsm)
+smk.df$lmat <- I(matrix(1/376, nrow(smk.df), 376))
+smk.df$zlmat <- I(smk.df$lmat * smk.df$Zraw)
 
 smk_fglm_ps <- gam(smoker ~ s(smat, by=zlmat, bs = "cr", k = 30), data=smk.df, 
                    method = "REML", family = binomial)
 summary(smk_fglm_ps)
 
-roc_in_sample <- roc(smk.df$smoker, smk_fglm_ps$fitted.values)
+roc_in_sample <- roc(smk_fglm_ps$model$smoker, smk_fglm_ps$fitted.values)
 auc(roc_in_sample)
 ```
 
@@ -3040,16 +3093,21 @@ auc(roc_in_sample)
 
 ## VAS based "high" vs "not in occasional smokers
 ```{r vas_explore}
-hist(pt.analytic.df$vas[pt.analytic.df$user_cat == "daily"], breaks = 10)
-boxplot(vas ~ user_cat, data = pt.analytic.df)
-summary(pt.analytic.df$vas[pt.analytic.df$user_cat == "daily"])
-summary(pt.analytic.df$vas[pt.analytic.df$user_cat == "occasional"])
-sum(pt.analytic.df$vas[pt.analytic.df$user_cat == "occasional"] >= 60, na.rm = T)
-sum(pt.analytic.df$vas[pt.analytic.df$user_cat == "occasional"] < 60, na.rm = T)
+hist(pt.analytic.df$vas1_high_score[pt.analytic.df$user_cat == "daily"], breaks = 15)
+hist(pt.analytic.df$vas1_high_score[pt.analytic.df$user_cat == "occasional"], breaks = 15)
+boxplot(vas1_high_score ~ user_cat, data = pt.analytic.df)
+summary(pt.analytic.df$vas1_high_score[pt.analytic.df$user_cat == "daily"])
+summary(pt.analytic.df$vas1_high_score[pt.analytic.df$user_cat == "occasional"])
+
+by(pt.analytic.df$vas1_high_score, INDICES = pt.analytic.df$user_cat, FUN = summary)
+sum(pt.analytic.df$vas1_high_score[pt.analytic.df$user_cat == "occasional"] >= 46, na.rm = T)
+sum(pt.analytic.df$vas1_high_score[pt.analytic.df$user_cat == "occasional"] < 46, na.rm = T)
 
 pt.analytic.df$vas_high <- NA
-pt.analytic.df$vas_high[pt.analytic.df$vas >= 60 & pt.analytic.df$user_cat == "occasional"] <- 1
-pt.analytic.df$vas_high[pt.analytic.df$vas < 60 & pt.analytic.df$user_cat == "occasional"] <- 0
+pt.analytic.df$vas_high[pt.analytic.df$vas1_high_score >= 46 &
+                          pt.analytic.df$user_cat == "occasional"] <- 1
+pt.analytic.df$vas_high[pt.analytic.df$vas1_high_score < 46 &
+                          pt.analytic.df$user_cat == "occasional"] <- 0
 ```
 
 ### VAS FoSR
@@ -3060,11 +3118,14 @@ right_0.vas.df <- merge(right_0.post, pt.analytic.df[!(is.na(pt.analytic.df$vas_
 right_0.vas.df <- right_0.vas.df[order(right_0.vas.df$subject_id, right_0.vas.df$frame), ]
 right_0.vas.df$sind <- right_0.vas.df$frame/400
 
-m.post_vas <- mgcv::gam(percent_change ~ s(sind, k=30, bs="cr") + s(sind, by=vas_high, k=30, bs = "cr"), 
+m.post_vas <- mgcv::gam(percent_change ~ s(sind, k=30, bs="cr") + 
+                          s(sind, by=vas_high, k=30, bs = "cr"), 
                   data = right_0.vas.df, method = "REML")
 
 ## Create a matrix of residuals
-post_vas.resid <- cbind(right_0.vas.df[!(is.na(right_0.vas.df$percent_change)), c("subject_id", "frame")], m.post_vas$residuals)
+post_vas.resid <- cbind(right_0.vas.df[!(is.na(right_0.vas.df$percent_change)), 
+                                       c("subject_id", "frame")], 
+                        m.post_vas$residuals)
 names(post_vas.resid) <- c("subject_id", "frame", "resid")
 post_vas.resid$frame_char <- str_pad(post_vas.resid$frame, width = 3, side = "left", pad = "0")
 
@@ -3072,6 +3133,7 @@ resid_mat <- reshape(post_vas.resid[, c("subject_id", "frame_char", "resid")],
                      timevar = "frame_char", 
                      idvar = "subject_id", 
                      direction = "wide")
+
 rownames(resid_mat) <- resid_mat$subject_id
 resid_mat$subject_id <- NULL
 resid_names <- names(resid_mat)
@@ -3126,12 +3188,15 @@ lpmat_high <- predict(post_vas.fri, newdata=df_pred_high, se.fit=TRUE, type = "l
 
 
 pred_df <- data.frame(seconds = rep(seq(0, 400), 2)/30,
-                      user = c(rep("not high", 401), rep("high", 401)), 
+                      user = c(rep(0, 401), rep(1, 401)), 
                       mean = c(lpmat_non %*% post_vas.coef, 
                                lpmat_high %*% post_vas.coef), 
                       se = c(sqrt(diag(lpmat_non %*% post_vas.cov %*% t(lpmat_non))), 
                              sqrt(diag(lpmat_high %*% post_vas.cov %*% t(lpmat_high)))), 
                       stringsAsFactors = F)
+pred_df$user <- factor(pred_df$user, 
+                       levels = c(0, 1), 
+                       labels = c("not high", "high"))
 
 post_vasProfile <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
                     geom_line()+
@@ -3150,11 +3215,28 @@ post_vasProfile.se <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = 
                     theme_bw()
                     
 post_vasTraj <- grid.arrange(arrangeGrob(post_vasProfile+theme(legend.position = "none"), 
-                                          post_vasProfile.se+theme(legend.position = "none"), nrow = 1), 
+                                          post_vasProfile.se+theme(legend.position = "none"), 
+                                         nrow = 1), 
                               legend_vasProfile, nrow = 1, 
                               widths = c(30, 6))
 ```
 
+### Plot vas high vs not occassional users
+```{r vas_dataplot}
+
+right_0.vas.df$vas_high <- factor(right_0.vas.df$vas_high, 
+                                  levels = c(0,1), 
+                                  labels = c("not high", "high"))
+
+ggplot(right_0.vas.df, aes(x=seconds, y = percent_change, group = subject_id, 
+                           col = vas_high))+
+  geom_line()+
+  geom_line(data = pred_df[pred_df$user == "not high",], 
+            aes(x=seconds, y = mean, group = user), color = "darkred", size = 1.2)+
+    geom_line(data = pred_df[pred_df$user == "high",], 
+            aes(x=seconds, y = mean, group = user), color = "darkblue", size = 1.2)+
+  theme_bw()
+```
 
 ### Effect for VAS "high" vs "not"
 ```{r vas_coef_effect_plots}
