@@ -3088,6 +3088,11 @@ roc_in_sample <- roc(smk_fglm_ps$model$smoker, smk_fglm_ps$fitted.values)
 auc(roc_in_sample)
 ```
 
+```{r plotSoFR, eval = F}
+
+df_sofr <- data.frame("smat" = sind)
+
+```
 
 
 ## VAS based "high" vs "not in occasional smokers
