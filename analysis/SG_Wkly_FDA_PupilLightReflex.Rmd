@@ -16,15 +16,11 @@ output:
 # To Do: 
 1. Try different number of basis functions start with 15 go to 30
 2. Write down mathematical interpretation of the plots.
-3. Impute with average for frames with missing values between known values
-4. Scalar on Function Regression
-    + Truncate all data to end of file with very little missing data
-    + Zsm - not needed
-    + Zlmat -- use raw data not smooth because have already been smoothed
-5. Regression using VAS score to define "high" vs "not" in occasional smokers
-    + Plot trajectories for "high" and "not" occcasional smokers
-6. Time from Consumption to test -- WPD add FoSR
-    + Interaction term with user category and Post consumption Time to Test
+3. Scalar on Function Regression - Plot
+3. Regression using VAS score to define "high" vs "not" in all smokers
+    + Scatterplot of VAS vs point of minimal constriction for all smokers 
+4. Time from Consumption to test -- WPD add FoSR
+    + How to do effect plots?
 7. Create a document with results to send to the collaborators
 
 # Questions for Collaborators
@@ -48,13 +44,15 @@ output:
       + Daily user: 25 ng/ml THC
 
 # Task Worked On From Last Week:
-1. Compare between AUCs for prediction models
-2. Convert frames to time (rate should be specified in Ben's paper)
-3. Scalar on Function Regression
-4. Covariance between left and right eye 
-    + (frame by frame)
-    + investigate time series correlation metrics
-5. Regression using VAS score to define "high" vs "not" in occasional smokers
+1. Impute with average for frames with missing values between known values
+2. Scalar on Function Regression
+    + Truncate all data to end of file with very little missing data
+    + Zsm - not needed
+    + Zlmat -- use raw data not smooth because have already been smoothed
+3. Regression using VAS score to define "high" vs "not" in occasional smokers
+    + Plot trajectories for "high" and "not" occcasional smokers
+4. Time from Consumption to test -- WPD add FoSR
+    + Interaction term with user category and Post consumption Time to Test
 
 ## Comments for Ben
 + Correcting export error leading to NA in frame numbers
@@ -3116,6 +3114,47 @@ pt.analytic.df$vas_high[pt.analytic.df$vas1_high_score < 46 &
 
 ### VAS scatterplot of pt of min constriction and VAS
 ```{r plot_VAS_minConstrict}
+AllSmokers <- pt.analytic.df[pt.analytic.df$user_cat != "non-user", ]
+preAllSmokers <- lm(min_constriction.pre2 ~ vas1_high_score, data = AllSmokers)
+postAllSmokers <- lm(min_constriction.post ~ vas1_high_score, data = AllSmokers)
+chgAllSmokers <- lm(min_constriction_chg ~ vas1_high_score, data = AllSmokers)
+
+
+pre_vas_minConstrict <- ggplot(data = AllSmokers, 
+                               aes(x = vas1_high_score, 
+                                   y = min_constriction.pre2, col = user_cat))+
+                             geom_point()+
+                             scale_y_continuous(limits = c(-55, 0))+
+                             geom_vline(xintercept = 46,color = "darkred")+
+                             labs(title = "POST VAS Feel High Score vs PRE minimal Constriction")+
+                             stat_poly_line() +
+                             stat_poly_eq(aes(label = after_stat(eq.label))) +
+                              stat_poly_eq(label.y = 0.9) +
+                             theme_bw()
+
+
+post_vas_minConstrict <- ggplot(data = AllSmokers, 
+                                aes(x = vas1_high_score, y = min_constriction.post, col = user_cat))+
+                             geom_point()+
+                             scale_y_continuous(limits = c(-55, 0))+
+                             geom_vline(xintercept = 46,color = "darkred")+
+                             labs(title = "POST VAS Feel High Score vs POST minimal Constriction")+
+                             geom_smooth(aes(color = NULL),se=FALSE, method = lm, formula = y ~ x)+
+                             theme_bw()
+
+chg_vas_minConstrict <- ggplot(data = AllSmokers, 
+                               aes(x = vas1_high_score, y = min_constriction_chg, col = user_cat))+
+                            geom_point()+
+                            scale_y_continuous(limits = c(-20, 40))+
+                            geom_vline(xintercept = 46,color = "darkred")+
+                            labs(title = "POST VAS Feel High Score vs Change in minimal Constriction (post-pre)")+
+                            geom_smooth(aes(color = NULL),se=FALSE, method = lm, formula = y ~ x)+
+                            theme_bw()
+jpeg(file.path(res_folder, "Scatterplot_VAS_MinConstriction_AllSmokers.jpg"),
+     height = 6, width = 23, res = 300, units = "in")
+grid.arrange(pre_vas_minConstrict, post_vas_minConstrict , chg_vas_minConstrict, nrow = 1)
+dev.off()
+
 pre_vas_minConstrict_occ <- ggplot(data = pt.analytic.df[pt.analytic.df$user_cat == "occasional", ], aes(x = vas1_high_score, y = min_constriction.pre2))+
                              geom_point()+
                              geom_vline(xintercept = 46,color = "darkred")+
