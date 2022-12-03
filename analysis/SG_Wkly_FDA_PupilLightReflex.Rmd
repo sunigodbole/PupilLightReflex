@@ -2966,6 +2966,7 @@ wi_smk_coef <- grid.arrange(ylab, posval, negval, wi_smk_plt,
 grid.arrange(post_smk_coef , wi_smk_coef, nrow = 1)
 # dev.off()
 ```
+
 ## Time from consumption to post test
 ```{r timepostconsump}
 wi.consump.m <- lm(postConsumpTimeToTest ~ PC1 + PC2 + PC3 + PC4 + PC5 + PC6, data = pt.wi.scores)
@@ -3129,12 +3130,33 @@ pre_vas_minConstrict <- ggplot(data = AllSmokers,
                              geom_vline(xintercept = 46,color = "darkred")+
                              labs(title = "POST VAS Feel High Score vs PRE minimal Constriction")+
                              geom_smooth(aes(col = NULL), method = "lm", se=FALSE, 
-                                         color="black", formula = y ~ x) +
-                             stat_cor(label.y = 0, col = "black")+
-                             stat_regline_equation(aes(col = NULL), label.y = -3, col = "black")+
-                             # stat_poly_line(aes(col = NULL), se = FALSE) +
-                             # stat_poly_eq(aes(label = after_stat(eq.label))) +
-                             # stat_poly_eq(label.y = 0.9) +
+                                         color="black", formula = y ~ x)+
+                             geom_label(label = paste(expression("beta == "),
+                                                  round(summary(preAllSmokers)$coefficients[2, 1], 2)),
+                                        x = 3,
+                                        y = 0,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                            geom_label(label = paste(expression("p =="),
+                                                     round(summary(preAllSmokers)$coefficients[2, 4], 2)),
+                                        x = 3,
+                                        y = -3,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                             geom_label(label = paste(expression("rho == "),
+                                                  round(cor(AllSmokers$min_constriction.pre2, 
+                                                            AllSmokers$vas1_high_score), 3)),
+                                        x = 3,
+                                        y = -6,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+  
                              theme_bw()
 
 
@@ -3144,7 +3166,34 @@ post_vas_minConstrict <- ggplot(data = AllSmokers,
                              scale_y_continuous(limits = c(-55, 0))+
                              geom_vline(xintercept = 46,color = "darkred")+
                              labs(title = "POST VAS Feel High Score vs POST minimal Constriction")+
-                             geom_smooth(aes(color = NULL),se=FALSE, method = lm, formula = y ~ x)+
+                             geom_smooth(aes(col = NULL), method = "lm", se=FALSE, 
+                                         color="black", formula = y ~ x)+
+                             geom_label(label = paste(expression("beta == "),
+                                                  round(summary(postAllSmokers)$coefficients[2, 1], 2)),
+                                        x = 3,
+                                        y = 0,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                            geom_label(label = paste(expression("p =="),
+                                                     round(summary(postAllSmokers)$coefficients[2, 4], 2)),
+                                        x = 3,
+                                        y = -3,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                             geom_label(label = paste(expression("rho == "),
+                                                  round(cor(AllSmokers$min_constriction.post, 
+                                                            AllSmokers$vas1_high_score), 3)),
+                                        x = 3,
+                                        y = -6,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+  
                              theme_bw()
 
 chg_vas_minConstrict <- ggplot(data = AllSmokers, 
@@ -3153,35 +3202,282 @@ chg_vas_minConstrict <- ggplot(data = AllSmokers,
                             scale_y_continuous(limits = c(-20, 40))+
                             geom_vline(xintercept = 46,color = "darkred")+
                             labs(title = "POST VAS Feel High Score vs Change in minimal Constriction (post-pre)")+
-                            geom_smooth(aes(color = NULL),se=FALSE, method = lm, formula = y ~ x)+
-                            theme_bw()
+                            geom_smooth(aes(col = NULL), method = "lm", se=FALSE, 
+                                         color="black", formula = y ~ x)+
+                             geom_label(label = paste(expression("beta == "),
+                                                  round(summary(chgAllSmokers)$coefficients[2, 1], 2)),
+                                        x = 3,
+                                        y = -15,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                            geom_label(label = paste(expression("p =="),
+                                                     round(summary(chgAllSmokers)$coefficients[2, 4], 2)),
+                                        x = 3,
+                                        y = -18,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                             geom_label(label = paste(expression("rho == "),
+                                                  round(cor(AllSmokers$min_constriction_chg, 
+                                                            AllSmokers$vas1_high_score), 3)),
+                                        x = 3,
+                                        y = -21,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+  
+                             theme_bw()
 jpeg(file.path(res_folder, "Scatterplot_VAS_MinConstriction_AllSmokers.jpg"),
      height = 6, width = 23, res = 300, units = "in")
 grid.arrange(pre_vas_minConstrict, post_vas_minConstrict , chg_vas_minConstrict, nrow = 1)
 dev.off()
 
-pre_vas_minConstrict_occ <- ggplot(data = pt.analytic.df[pt.analytic.df$user_cat == "occasional", ], aes(x = vas1_high_score, y = min_constriction.pre2))+
+### Occasional Users
+OccSmokers <- AllSmokers[AllSmokers$user_cat == "occasional", ]
+preOccSmokers <- lm(min_constriction.pre2 ~ vas1_high_score, data = OccSmokers)
+postOccSmokers <- lm(min_constriction.post ~ vas1_high_score, data = OccSmokers)
+chgOccSmokers <- lm(min_constriction_chg ~ vas1_high_score, data = OccSmokers)
+
+
+pre_vas_minConstrict_occ <- ggplot(data = OccSmokers, 
+                               aes(x = vas1_high_score, 
+                                   y = min_constriction.pre2))+
                              geom_point()+
+                             scale_y_continuous(limits = c(-55, 0))+
                              geom_vline(xintercept = 46,color = "darkred")+
-                             labs(title = "POST VAS Feel High Score vs PRE minimal Constriction \nin Occasional Users")+
+                             labs(title = "POST VAS Feel High Score vs PRE minimal Constriction \nOccasional Smokers")+
+                             geom_smooth(aes(col = NULL), method = "lm", se=FALSE, 
+                                         color="black", formula = y ~ x)+
+                             geom_label(label = paste(expression("beta == "),
+                                                  round(summary(preOccSmokers)$coefficients[2, 1], 2)),
+                                        x = 3,
+                                        y = 0,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                            geom_label(label = paste(expression("p =="),
+                                                     round(summary(preOccSmokers)$coefficients[2, 4], 2)),
+                                        x = 3,
+                                        y = -3,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                             geom_label(label = paste(expression("rho == "),
+                                                  round(cor(OccSmokers$min_constriction.pre2, 
+                                                            OccSmokers$vas1_high_score), 3)),
+                                        x = 3,
+                                        y = -6,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+  
                              theme_bw()
 
 
-post_vas_minConstrict_occ <- ggplot(data = pt.analytic.df[pt.analytic.df$user_cat == "occasional", ], aes(x = vas1_high_score, y = min_constriction.post))+
+post_vas_minConstrict_occ <- ggplot(data = OccSmokers, 
+                                aes(x = vas1_high_score, y = min_constriction.post))+
                              geom_point()+
+                             scale_y_continuous(limits = c(-55, 0))+
                              geom_vline(xintercept = 46,color = "darkred")+
-                             labs(title = "POST VAS Feel High Score vs POST minimal Constriction \nin Occasional Users")+
+                             labs(title = "POST VAS Feel High Score vs POST minimal Constriction \nOccasional Smokers")+
+                             geom_smooth(aes(col = NULL), method = "lm", se=FALSE, 
+                                         color="black", formula = y ~ x)+
+                             geom_label(label = paste(expression("beta == "),
+                                                  round(summary(postOccSmokers)$coefficients[2, 1], 2)),
+                                        x = 3,
+                                        y = 0,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                            geom_label(label = paste(expression("p =="),
+                                                     round(summary(postOccSmokers)$coefficients[2, 4], 2)),
+                                        x = 3,
+                                        y = -3,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                             geom_label(label = paste(expression("rho == "),
+                                                  round(cor(OccSmokers$min_constriction.post, 
+                                                            OccSmokers$vas1_high_score), 3)),
+                                        x = 3,
+                                        y = -6,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+  
                              theme_bw()
 
-chg_vas_minConstrict_occ <- ggplot(data = pt.analytic.df[pt.analytic.df$user_cat == "occasional", ], aes(x = vas1_high_score, y = min_constriction_chg))+
+chg_vas_minConstrict_occ <- ggplot(data = OccSmokers, 
+                               aes(x = vas1_high_score, y = min_constriction_chg))+
                             geom_point()+
+                            scale_y_continuous(limits = c(-20, 40))+
                             geom_vline(xintercept = 46,color = "darkred")+
-                            labs(title = "POST VAS Feel High Score vs Change in minimal Constriction (post-pre) \nin Occasional Users")+
-                            theme_bw()
+                            labs(title = "POST VAS Feel High Score vs Change in minimal Constriction (post-pre) \nOccasional Smokers")+
+                            geom_smooth(aes(col = NULL), method = "lm", se=FALSE, 
+                                         color="black", formula = y ~ x)+
+                             geom_label(label = paste(expression("beta == "),
+                                                  round(summary(chgOccSmokers)$coefficients[2, 1], 2)),
+                                        x = 3,
+                                        y = -15,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                            geom_label(label = paste(expression("p =="),
+                                                     round(summary(chgOccSmokers)$coefficients[2, 4], 2)),
+                                        x = 3,
+                                        y = -18,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                             geom_label(label = paste(expression("rho == "),
+                                                  round(cor(OccSmokers$min_constriction_chg, 
+                                                            OccSmokers$vas1_high_score), 3)),
+                                        x = 3,
+                                        y = -21,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+  
+                             theme_bw()
 
-jpeg(file.path(res_folder, "Scatterplot_VAS_MinConstriction.jpg"),
+jpeg(file.path(res_folder, "Scatterplot_VAS_MinConstriction_Occ.jpg"),
      height = 6, width = 23, res = 300, units = "in")
 grid.arrange(pre_vas_minConstrict_occ, post_vas_minConstrict_occ , chg_vas_minConstrict_occ, nrow = 1)
+dev.off()
+
+### Daily Users
+DlySmokers <- AllSmokers[AllSmokers$user_cat == "daily", ]
+preDlySmokers <- lm(min_constriction.pre2 ~ vas1_high_score, data = DlySmokers)
+postDlySmokers <- lm(min_constriction.post ~ vas1_high_score, data = DlySmokers)
+chgDlySmokers <- lm(min_constriction_chg ~ vas1_high_score, data = DlySmokers)
+
+
+pre_vas_minConstrict_dly <- ggplot(data = DlySmokers, 
+                               aes(x = vas1_high_score, 
+                                   y = min_constriction.pre2))+
+                             geom_point()+
+                             scale_y_continuous(limits = c(-55, 0))+
+                             geom_vline(xintercept = 46,color = "darkred")+
+                             labs(title = "POST VAS Feel High Score vs PRE minimal Constriction \nDaily Smokers")+
+                             geom_smooth(aes(col = NULL), method = "lm", se=FALSE, 
+                                         color="black", formula = y ~ x)+
+                             geom_label(label = paste(expression("beta == "),
+                                                  round(summary(preDlySmokers)$coefficients[2, 1], 2)),
+                                        x = 13,
+                                        y = 0,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                            geom_label(label = paste(expression("p =="),
+                                                     round(summary(preDlySmokers)$coefficients[2, 4], 2)),
+                                        x = 13,
+                                        y = -3,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                             geom_label(label = paste(expression("rho == "),
+                                                  round(cor(DlySmokers$min_constriction.pre2, 
+                                                            DlySmokers$vas1_high_score), 3)),
+                                        x = 13,
+                                        y = -6,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+  
+                             theme_bw()
+
+
+post_vas_minConstrict_dly <- ggplot(data = DlySmokers, 
+                                aes(x = vas1_high_score, y = min_constriction.post))+
+                             geom_point()+
+                             scale_y_continuous(limits = c(-55, 0))+
+                             geom_vline(xintercept = 46,color = "darkred")+
+                             labs(title = "POST VAS Feel High Score vs POST minimal Constriction \nDaily Smokers")+
+                             geom_smooth(aes(col = NULL), method = "lm", se=FALSE, 
+                                         color="black", formula = y ~ x)+
+                             geom_label(label = paste(expression("beta == "),
+                                                  round(summary(postDlySmokers)$coefficients[2, 1], 2)),
+                                        x = 13,
+                                        y = 0,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                            geom_label(label = paste(expression("p =="),
+                                                     round(summary(postDlySmokers)$coefficients[2, 4], 2)),
+                                        x = 13,
+                                        y = -3,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                             geom_label(label = paste(expression("rho == "),
+                                                  round(cor(DlySmokers$min_constriction.post, 
+                                                            DlySmokers$vas1_high_score), 3)),
+                                        x = 13,
+                                        y = -6,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+  
+                             theme_bw()
+
+chg_vas_minConstrict_dly <- ggplot(data = DlySmokers, 
+                               aes(x = vas1_high_score, y = min_constriction_chg))+
+                            geom_point()+
+                            scale_y_continuous(limits = c(-20, 40))+
+                            geom_vline(xintercept = 46,color = "darkred")+
+                            labs(title = "POST VAS Feel High Score vs Change in minimal Constriction (post-pre) \nDaily Smokers")+
+                            geom_smooth(aes(col = NULL), method = "lm", se=FALSE, 
+                                         color="black", formula = y ~ x)+
+                             geom_label(label = paste(expression("beta == "),
+                                                  round(summary(chgDlySmokers)$coefficients[2, 1], 2)),
+                                        x = 13,
+                                        y = -15,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                            geom_label(label = paste(expression("p =="),
+                                                     round(summary(chgDlySmokers)$coefficients[2, 4], 2)),
+                                        x = 13,
+                                        y = -18,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+                             geom_label(label = paste(expression("rho == "),
+                                                  round(cor(DlySmokers$min_constriction_chg, 
+                                                            DlySmokers$vas1_high_score), 3)),
+                                        x = 13,
+                                        y = -21,
+                                        color = "black",
+                                        label.size = NA, 
+                                        parse = T, 
+                                        hjust = 0)+
+  
+                             theme_bw()
+
+jpeg(file.path(res_folder, "Scatterplot_VAS_MinConstriction_DLY.jpg"),
+     height = 6, width = 23, res = 300, units = "in")
+grid.arrange(pre_vas_minConstrict_dly, post_vas_minConstrict_dly , chg_vas_minConstrict_dly, nrow = 1)
 dev.off()
 ```
 
