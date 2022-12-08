@@ -557,6 +557,7 @@ right_0.w <- reshape(right_0.df,
 rownames(right_0.w) <- paste0(right_0.w$subject_id, "_", right_0.w$tp)
 pct_chg <- names(right_0.w[, 4:602])
 
+
 mean_fxn <- as.data.frame(aggregate(right_0.w[, 4:602], 
                                     list(right_0.w$tp, 
                                          right_0.w$user_cat),
@@ -958,13 +959,13 @@ right_0.pt <- merge(right_0.pt, pt.df,
                       by = "subject_id")
 
 saveRDS(right_0.post, file.path(data_folder, ps_folder,
-                                "PupilLightReflex_POST_rightEye_20221128.rds"))
+                                "PupilLightReflex_POST_rightEye_20221208.rds"))
 
 saveRDS(right_0.pt, file.path(data_folder, ps_folder,
-                                "PupilLightReflex_WPD_rightEye_20221128.rds"))
+                                "PupilLightReflex_WPD_rightEye_20221208.rds"))
 
 saveRDS(pt.df[pt.df$subject_id %in% analytic.N,], file.path(data_folder, ps_folder,
-                                "PupilLightReflex_PtData_20221128.rds"))
+                                "PupilLightReflex_PtData_20221208.rds"))
 
 ```
 
