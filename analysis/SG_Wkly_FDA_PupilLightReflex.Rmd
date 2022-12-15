@@ -17,11 +17,11 @@ output:
 1. Try different number of basis functions start with 15 go to 30
 2. Write down mathematical interpretation of the plots.
 3. Scalar on Function Regression - Plot
-3. Regression using VAS score to define "high" vs "not" in all smokers
+4. Regression using VAS score to define "high" vs "not" in all smokers
     + Scatterplot of VAS vs point of minimal constriction for all smokers 
-4. Time from Consumption to test -- WPD add FoSR
+5. Time from Consumption to test -- WPD add FoSR
     + How to do effect plots?
-7. Create a document with results to send to the collaborators
+6. Create a document with results to send to the collaborators
 
 # Questions for Collaborators
 1. How much time does it take for the effects of marijuana to reduce?
@@ -2968,100 +2968,6 @@ grid.arrange(post_smk_coef , wi_smk_coef, nrow = 1)
 # dev.off()
 ```
 
-## Time from consumption to post test
-```{r timepostconsump}
-wi.consump.m <- lm(postConsumpTimeToTest ~ PC1 + PC2 + PC3 + PC4 + PC5 + PC6, data = pt.wi.scores)
-summary(wi.consump.m)
-
-post.consump.m <- lm(postConsumpTimeToTest ~ PC1 + PC2 + PC3 + PC4, data = pt.scores)
-summary(post.consump.m)
-
-pt.analytic.df <-  merge(pt.analytic.df, pt.wi.scores[, c("subject_id", "PC1", "PC2", "PC3", "PC4", "PC5", "PC6")], 
-                         by = "subject_id")
-names(pt.analytic.df)[names(pt.analytic.df) == "PC1"] <- "wpd.PC1"
-names(pt.analytic.df)[names(pt.analytic.df) == "PC2"] <- "wpd.PC2"
-names(pt.analytic.df)[names(pt.analytic.df) == "PC3"] <- "wpd.PC3"
-names(pt.analytic.df)[names(pt.analytic.df) == "PC4"] <- "wpd.PC4"
-names(pt.analytic.df)[names(pt.analytic.df) == "PC5"] <- "wpd.PC5"
-names(pt.analytic.df)[names(pt.analytic.df) == "PC6"] <- "wpd.PC6"
-
-pt.analytic.df <-  merge(pt.analytic.df, pt.scores[, c("subject_id", "PC1", "PC2", "PC3", "PC4")], 
-                         by = "subject_id")
-names(pt.analytic.df)[names(pt.analytic.df) == "PC1"] <- "post.PC1"
-names(pt.analytic.df)[names(pt.analytic.df) == "PC2"] <- "post.PC2"
-names(pt.analytic.df)[names(pt.analytic.df) == "PC3"] <- "post.PC3"
-names(pt.analytic.df)[names(pt.analytic.df) == "PC4"] <- "post.PC4"
-
-
-table1(~ postConsumpTimeToTest + Post_PreTime|user_cat, 
-       data = pt.analytic.df)
-
-by(pt.analytic.df$postConsumpTimeToTest, INDICES = list(pt.analytic.df$user_cat), summary)
-
-postConsump.cor <- cor(pt.analytic.df$postConsumpTimeToTest, 
-                       pt.analytic.df[, c("demo_age", "demo_weight", "demo_height", "BMI",
-                                          "thc.post", "min_constriction.post", "slope.post",
-                                          "AUC.post", "thc_chg", "min_constriction_chg",
-                                          "AUC_chg", "wpd.PC1", "wpd.PC2", "wpd.PC3",
-                                          "wpd.PC4", "wpd.PC5", "wpd.PC6", 
-                                          "post.PC1", "post.PC2", "post.PC3", "post.PC4",
-                                          "vas1_high_score", "vas_high_score_chg", 
-                                          "vas1_score_dc", "vas_score_dc_chg",
-                                          "Post_PreTime")], 
-                       use = "pairwise.complete.obs")
-
-postConsump.rcorr <- rcorr(as.matrix(pt.analytic.df[, c("postConsumpTimeToTest",
-                                                        "demo_age", "demo_weight",
-                                                        "demo_height", "BMI",
-                                                        "thc.post", "min_constriction.post",
-                                                        "slope.post", "AUC.post",
-                                                        "thc_chg", "min_constriction_chg",
-                                                        "AUC_chg",
-                                                        "wpd.PC1", "wpd.PC2", "wpd.PC3",
-                                                        "wpd.PC4", "wpd.PC5", "wpd.PC6",
-                                                        "post.PC1", "post.PC2", 
-                                                        "post.PC3", "post.PC4",
-                                                        "vas1_high_score", 
-                                                        "vas_high_score_chg",
-                                                        "vas1_score_dc", 
-                                                        "vas_score_dc_chg", 
-                                                        "Post_PreTime")]))
-
-postConsump.cor.df <- data.frame(postConsump_rho = postConsump.rcorr$r[, 1], 
-                                 postConsump_p = postConsump.rcorr$P[, 1], 
-                                 postConsump_n = postConsump.rcorr$n[, 1])
-postConsump.cor.df <- postConsump.cor.df[order(-1*abs(postConsump.cor.df$postConsump_rho)), ]
-postConsump.cor.df <- postConsump.cor.df[-1, ]
-rm(postConsump.rcorr)
-
-knitr::kable(postConsump.cor.df)
-
-ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = user_cat, y = postConsumpTimeToTest, col = user_cat))+
-  geom_boxplot()+
-  theme_bw()
-
-ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = demo_gender, y = postConsumpTimeToTest, col = demo_gender))+
-  geom_boxplot()+
-  theme_bw()
-
-ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = postConsumpTimeToTest, y = Post_PreTime, col = user_cat))+
-  geom_point()+
-  theme_bw()
-
-ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = postConsumpTimeToTest, y = min_constriction.post, col = user_cat))+
-  geom_point()+
-  theme_bw()
-
-ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = postConsumpTimeToTest, y = post.PC2, col = user_cat))+
-  geom_point()+
-  theme_bw()
-
-ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = postConsumpTimeToTest, y = wpd.PC3, col = user_cat))+
-  geom_point()+
-  theme_bw()
-
-```
-
 ## SoFR - prediction of smoker vs non-smoker
 ```{r smk_right}
 smk.df <- pt.analytic.df[, c("subject_id", "user_cat")]
@@ -3091,7 +2997,27 @@ auc(roc_in_sample)
 
 ```{r plotSoFR, eval = F}
 
-df_sofr <- data.frame("smat" = sind)
+df_sofr <- data.frame("smat" = sind, "zlmat" = 1)
+
+sofr_pred <- predict(smk_fglm_ps, newdata = df_sofr, , se.fit = TRUE, type = "iterms")
+
+plot.sofr <- data.frame("frame" = 0:375,
+                            "f0" = sofr_pred$fit[, 1],
+                            'f0.se' = sofr_pred$se.fit[, 1])
+
+ggplot(data = plot.sofr, aes(x=frame, y = exp(f0)))+
+  geom_line()+
+  geom_line(aes(x=frame, y = exp(f0-2*f0.se)), linetype = 'longdash')+
+  geom_line(aes(x=frame, y = exp(f0+2*f0.se)), linetype = 'longdash')+
+  labs(title = "Odd Ratio (?) of being a smoker vs non-smoker over the test duration")+
+  theme_bw()
+
+ggplot(data = plot.sofr, aes(x=frame/300, y = f0))+
+  geom_line()+
+  geom_line(aes(x=frame, y = f0-2*f0.se), linetype = 'longdash')+
+  geom_line(aes(x=frame, y = f0+2*f0.se), linetype = 'longdash')+
+  labs(title = "Odd Ratio (?) of being a smoker vs non-smoker over the test duration")+
+  theme_bw()
 
 ```
 
@@ -3116,7 +3042,7 @@ pt.analytic.df$vas_high[pt.analytic.df$vas1_high_score < 46 &
 ```
 
 ### VAS scatterplot of pt of min constriction and VAS
-```{r plot_VAS_minConstrict}
+```{r plot_VAS_minConstrict, fig.width=15, fig.height = 6}
 AllSmokers <- pt.analytic.df[pt.analytic.df$user_cat != "non-user", ]
 preAllSmokers <- lm(min_constriction.pre2 ~ vas1_high_score, data = AllSmokers)
 postAllSmokers <- lm(min_constriction.post ~ vas1_high_score, data = AllSmokers)
@@ -3232,10 +3158,10 @@ chg_vas_minConstrict <- ggplot(data = AllSmokers,
                                         hjust = 0)+
   
                              theme_bw()
-jpeg(file.path(res_folder, "Scatterplot_VAS_MinConstriction_AllSmokers.jpg"),
-     height = 6, width = 23, res = 300, units = "in")
+# jpeg(file.path(res_folder, "Scatterplot_VAS_MinConstriction_AllSmokers.jpg"),
+#      height = 6, width = 23, res = 300, units = "in")
 grid.arrange(pre_vas_minConstrict, post_vas_minConstrict , chg_vas_minConstrict, nrow = 1)
-dev.off()
+# dev.off()
 
 ### Occasional Users
 OccSmokers <- AllSmokers[AllSmokers$user_cat == "occasional", ]
@@ -3354,10 +3280,10 @@ chg_vas_minConstrict_occ <- ggplot(data = OccSmokers,
   
                              theme_bw()
 
-jpeg(file.path(res_folder, "Scatterplot_VAS_MinConstriction_Occ.jpg"),
-     height = 6, width = 23, res = 300, units = "in")
+# jpeg(file.path(res_folder, "Scatterplot_VAS_MinConstriction_Occ.jpg"),
+#      height = 6, width = 23, res = 300, units = "in")
 grid.arrange(pre_vas_minConstrict_occ, post_vas_minConstrict_occ , chg_vas_minConstrict_occ, nrow = 1)
-dev.off()
+# dev.off()
 
 ### Daily Users
 DlySmokers <- AllSmokers[AllSmokers$user_cat == "daily", ]
@@ -3476,10 +3402,10 @@ chg_vas_minConstrict_dly <- ggplot(data = DlySmokers,
   
                              theme_bw()
 
-jpeg(file.path(res_folder, "Scatterplot_VAS_MinConstriction_DLY.jpg"),
-     height = 6, width = 23, res = 300, units = "in")
+# jpeg(file.path(res_folder, "Scatterplot_VAS_MinConstriction_DLY.jpg"),
+#      height = 6, width = 23, res = 300, units = "in")
 grid.arrange(pre_vas_minConstrict_dly, post_vas_minConstrict_dly , chg_vas_minConstrict_dly, nrow = 1)
-dev.off()
+# dev.off()
 ```
 
 ### VAS FoSR
@@ -3611,7 +3537,7 @@ ggplot(right_0.vas.df, aes(x=seconds, y = percent_change, group = subject_id,
 ```
 
 ### Effect for VAS "high" vs "not"
-```{r vas_coef_effect_plots}
+```{r vas_coef_effect_plots, fig.width = 10, fig.height=6}
 pred_f1 <- predict(post_vas.fri, newdata=df_pred_high, se.fit=TRUE, type = "terms")
 
 pred_coef_df <- data.frame(seconds = seq(0, 400)/30,
@@ -3734,8 +3660,101 @@ ggplot(data = wpd_corr_df, aes(frame, btwEyeCor))+
   theme_bw()
 ```
 
-## Function on Scalar Regression
-### Post -- Interaction with Post Consumption Time to Test (PCTT)
+## Time from consumption to post test
+```{r timepostconsump}
+wi.consump.m <- lm(postConsumpTimeToTest ~ PC1 + PC2 + PC3 + PC4 + PC5 + PC6, data = pt.wi.scores)
+summary(wi.consump.m)
+
+post.consump.m <- lm(postConsumpTimeToTest ~ PC1 + PC2 + PC3 + PC4, data = pt.scores)
+summary(post.consump.m)
+
+pt.analytic.df <-  merge(pt.analytic.df, pt.wi.scores[, c("subject_id", "PC1", "PC2", "PC3", "PC4", "PC5", "PC6")], 
+                         by = "subject_id")
+names(pt.analytic.df)[names(pt.analytic.df) == "PC1"] <- "wpd.PC1"
+names(pt.analytic.df)[names(pt.analytic.df) == "PC2"] <- "wpd.PC2"
+names(pt.analytic.df)[names(pt.analytic.df) == "PC3"] <- "wpd.PC3"
+names(pt.analytic.df)[names(pt.analytic.df) == "PC4"] <- "wpd.PC4"
+names(pt.analytic.df)[names(pt.analytic.df) == "PC5"] <- "wpd.PC5"
+names(pt.analytic.df)[names(pt.analytic.df) == "PC6"] <- "wpd.PC6"
+
+pt.analytic.df <-  merge(pt.analytic.df, pt.scores[, c("subject_id", "PC1", "PC2", "PC3", "PC4")], 
+                         by = "subject_id")
+names(pt.analytic.df)[names(pt.analytic.df) == "PC1"] <- "post.PC1"
+names(pt.analytic.df)[names(pt.analytic.df) == "PC2"] <- "post.PC2"
+names(pt.analytic.df)[names(pt.analytic.df) == "PC3"] <- "post.PC3"
+names(pt.analytic.df)[names(pt.analytic.df) == "PC4"] <- "post.PC4"
+
+
+table1(~ postConsumpTimeToTest + Post_PreTime|user_cat, 
+       data = pt.analytic.df)
+
+by(pt.analytic.df$postConsumpTimeToTest, INDICES = list(pt.analytic.df$user_cat), summary)
+
+postConsump.cor <- cor(pt.analytic.df$postConsumpTimeToTest, 
+                       pt.analytic.df[, c("demo_age", "demo_weight", "demo_height", "BMI",
+                                          "thc.post", "min_constriction.post", "slope.post",
+                                          "AUC.post", "thc_chg", "min_constriction_chg",
+                                          "AUC_chg", "wpd.PC1", "wpd.PC2", "wpd.PC3",
+                                          "wpd.PC4", "wpd.PC5", "wpd.PC6", 
+                                          "post.PC1", "post.PC2", "post.PC3", "post.PC4",
+                                          "vas1_high_score", "vas_high_score_chg", 
+                                          "vas1_score_dc", "vas_score_dc_chg",
+                                          "Post_PreTime")], 
+                       use = "pairwise.complete.obs")
+
+postConsump.rcorr <- rcorr(as.matrix(pt.analytic.df[, c("postConsumpTimeToTest",
+                                                        "demo_age", "demo_weight",
+                                                        "demo_height", "BMI",
+                                                        "thc.post", "min_constriction.post",
+                                                        "slope.post", "AUC.post",
+                                                        "thc_chg", "min_constriction_chg",
+                                                        "AUC_chg",
+                                                        "wpd.PC1", "wpd.PC2", "wpd.PC3",
+                                                        "wpd.PC4", "wpd.PC5", "wpd.PC6",
+                                                        "post.PC1", "post.PC2", 
+                                                        "post.PC3", "post.PC4",
+                                                        "vas1_high_score", 
+                                                        "vas_high_score_chg",
+                                                        "vas1_score_dc", 
+                                                        "vas_score_dc_chg", 
+                                                        "Post_PreTime")]))
+
+postConsump.cor.df <- data.frame(postConsump_rho = postConsump.rcorr$r[, 1], 
+                                 postConsump_p = postConsump.rcorr$P[, 1], 
+                                 postConsump_n = postConsump.rcorr$n[, 1])
+postConsump.cor.df <- postConsump.cor.df[order(-1*abs(postConsump.cor.df$postConsump_rho)), ]
+postConsump.cor.df <- postConsump.cor.df[-1, ]
+rm(postConsump.rcorr)
+
+knitr::kable(postConsump.cor.df)
+
+ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = user_cat, y = postConsumpTimeToTest, col = user_cat))+
+  geom_boxplot()+
+  theme_bw()
+
+ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = demo_gender, y = postConsumpTimeToTest, col = demo_gender))+
+  geom_boxplot()+
+  theme_bw()
+
+ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = postConsumpTimeToTest, y = Post_PreTime, col = user_cat))+
+  geom_point()+
+  theme_bw()
+
+ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = postConsumpTimeToTest, y = min_constriction.post, col = user_cat))+
+  geom_point()+
+  theme_bw()
+
+ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = postConsumpTimeToTest, y = post.PC2, col = user_cat))+
+  geom_point()+
+  theme_bw()
+
+ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = postConsumpTimeToTest, y = wpd.PC3, col = user_cat))+
+  geom_point()+
+  theme_bw()
+```
+
+
+### FoSR Post -- Interaction with Post Consumption Time to Test (PCTT)
 $$ 
 \begin{aligned}
 Y_{i}(t) &= f_0(t) + f_1(t)*I(user = occasional) + f_2(t)*I(user = daily) +f_3(t)*I(user = occasional)*PCTT + f_4(t)*I(user = daily)*PCTT + b_i(t) + \epsilon_i(t)\\
@@ -3748,6 +3767,10 @@ $$
 
 ```{r post_gam_intPCTT}
 pt.analytic.df$postConsumpTimeToTest_c <- pt.analytic.df$postConsumpTimeToTest- round(mean(pt.analytic.df$postConsumpTimeToTest, na.rm = T), 3)
+
+summary(pt.analytic.df$postConsumpTimeToTest_c)
+by(data = pt.analytic.df$postConsumpTimeToTest_c, INDICES = pt.analytic.df$user_cat, FUN = summary)
+
 pt.analytic.df$occ_PCTT <- pt.analytic.df$occasional*pt.analytic.df$postConsumpTimeToTest_c
 pt.analytic.df$dly_PCTT <- pt.analytic.df$daily*pt.analytic.df$postConsumpTimeToTest_c
 pt.analytic.df$occ_PCTT[pt.analytic.df$user == "non-user"] <- 0
@@ -3762,11 +3785,11 @@ post_intPCTT.gam.df$sind <- post_intPCTT.gam.df$frame/400
 # head(right_0.gam.df)
 
 m.post_intPCTT_gam <- mgcv::bam(percent_change ~ s(sind, k=30, bs="cr") +
-                          s(sind, by=occasional, k=30, bs = "cr") +
-                          s(sind, by=daily, k=30, bs = "cr") +
-                          s(sind, by=occ_PCTT, k=30, bs = "cr") + 
-                          s(sind, by=dly_PCTT, k=30, bs = "cr"), 
-                  data = post_intPCTT.gam.df, method = "REML")
+                                  s(sind, by=occasional, k=30, bs = "cr") +
+                                  s(sind, by=daily, k=30, bs = "cr") +
+                                  s(sind, by=occ_PCTT, k=30, bs = "cr") + 
+                                  s(sind, by=dly_PCTT, k=30, bs = "cr"), 
+                                data = post_intPCTT.gam.df, method = "REML")
 summary(m.post_intPCTT_gam)
 ## Create a matrix of residuals
 post_intPCTT_gam.resid <- cbind(post_intPCTT.gam.df[!(is.na(post_intPCTT.gam.df$percent_change)), 
@@ -3974,64 +3997,73 @@ post_userTraj <- grid.arrange(arrangeGrob(post_userProfile+theme(legend.position
 ```
 
 
-```{r coef_effect_plots_intPCTT, eval=F}
-pred_f1 <- predict(post_gam.fri, newdata=df_pred_occ, se.fit=TRUE, type = "terms")
-pred_f2 <- predict(post_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "terms")
+```{r coef_effect_plots_intPCTT}
+
+df_pred_occInt <- data.frame("sind" = unique(post_intPCTT.gam.df$sind), "occasional" = 0, "daily" = 0, "occ_PCTT" = 10, "dly_PCTT" = 0,
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, "Phi4" = 0, 
+                          "subject_id" = post_intPCTT.gam.df$subject_id[1])
+
+# lpmat_occInt <- predict(post_intPCTT_gam.fri, newdata=df_pred_occInt, se.fit=TRUE, type = "lpmatrix")
+
+pred_f1 <- predict(post_intPCTT_gam.fri, newdata=df_pred_occInt, se.fit=TRUE, type = "terms")
+# pred_f2 <- predict(post_intPCTT_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "terms")
 
 pred_coef_df <- data.frame(seconds = seq(0, 400)/30,
-                           f0_hat = lpmat_non %*% post_gam.coef, 
-                           f0_se = sqrt(diag(lpmat_non %*% post_gam.cov %*% t(lpmat_non))), 
-                           f1_hat = pred_f1$fit[, 2], 
-                           f1_se = pred_f1$se.fit[, 2], 
-                           f2_hat = pred_f2$fit[, 3], 
-                           f2_se = pred_f2$se.fit[, 3])
+                           # f0_hat = lpmat_non %*% post_gam.coef, 
+                           # f0_se = sqrt(diag(lpmat_non %*% post_gam.cov %*% t(lpmat_non))), 
+                           f1_hat = pred_f1$fit[, 1], 
+                           f1_se = pred_f1$se.fit[, 1]
+                           # ,
+                           # f2_hat = pred_f2$fit[, 3],
+                           # f2_se = pred_f2$se.fit[, 3]
+                           )
 
-post_non_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f0_hat))+
-                geom_line()+
-                geom_line(aes(x = seconds, y = f0_hat + 2*f0_se), linetype = "longdash")+
-                geom_line(aes(x = seconds, y = f0_hat - 2*f0_se), linetype = "longdash")+
-                labs(title = "Average Percent Change of a Non-user (Post)", ylab = "Percent Change")+
-                theme_bw()
+# post_non_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f0_hat))+
+#                 geom_line()+
+#                 geom_line(aes(x = seconds, y = f0_hat + 2*f0_se), linetype = "longdash")+
+#                 geom_line(aes(x = seconds, y = f0_hat - 2*f0_se), linetype = "longdash")+
+#                 labs(title = "Average Percent Change of a Non-user (Post)", ylab = "Percent Change")+
+#                 theme_bw()
 
 post_occ_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f1_hat))+
                 geom_line()+
                 geom_line(aes(x = seconds, y = f1_hat + 2*f1_se), linetype = "longdash")+
                 geom_line(aes(x = seconds, y = f1_hat - 2*f1_se), linetype = "longdash")+
                 geom_line(aes(x = seconds, y = 0), col = "darkred")+
-                labs(title = "Difference in Percent Change: Occasional and Non-user (Post)", 
+                labs(title = "Difference in Percent Change: Occasional Interaction (Post)", 
                      y= "")+
                 theme_bw()+
                 scale_x_continuous(expand = c(0, 0))+
                 theme(rect = element_rect(fill = "transparent"))
 
-post_dly_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f2_hat))+
-                geom_line()+
-                geom_line(aes(x = seconds, y = f2_hat + 2*f2_se), linetype = "longdash")+
-                geom_line(aes(x = seconds, y = f2_hat - 2*f2_se), linetype = "longdash")+
-                geom_line(aes(x = seconds, y = 0), col = "darkred")+
-                labs(title = "Difference in Percent Change: Daily and Non-user (Post)", 
-                     y = "")+
-                theme_bw()+
-                scale_x_continuous(expand = c(0, 0))+
-                theme(rect = element_rect(fill = "transparent"))
+# post_dly_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f2_hat))+
+#                 geom_line()+
+#                 geom_line(aes(x = seconds, y = f2_hat + 2*f2_se), linetype = "longdash")+
+#                 geom_line(aes(x = seconds, y = f2_hat - 2*f2_se), linetype = "longdash")+
+#                 geom_line(aes(x = seconds, y = 0), col = "darkred")+
+#                 labs(title = "Difference in Percent Change: Daily and Non-user (Post)", 
+#                      y = "")+
+#                 theme_bw()+
+#                 scale_x_continuous(expand = c(0, 0))+
+#                 theme(rect = element_rect(fill = "transparent"))
 
-ylab <- textGrob(label = "Difference in Percent Change", rot = 90, 
-                 gp = gpar(fontsize = 12))
-posval <- textGrob(label = sapply(strwrap("Less Constriction in User", width = 15, simplify = F),
-                                  paste, collapse = "\n"), rot = 0, 
-                 gp = gpar(fontsize = 8))
-negval <- textGrob(label = sapply(strwrap("More Constriction in User", width = 15, simplify = F),
-                                  paste, collapse = "\n"), rot = 0, 
-                 gp = gpar(fontsize = 8))
-
-post_occ_coef <- grid.arrange(ylab, posval, negval, post_occ_plt, 
-                              ncol = 2, nrow = 2, 
-                              layout_matrix = rbind(c(1, 2, rep(4, 15)), c(1, 3, rep(4, 15))))
-
-post_dly_coef <- grid.arrange(ylab, posval, negval, post_dly_plt, 
-                              ncol = 2, nrow = 2, 
-                              layout_matrix = rbind(c(1, 2, rep(4, 15)), c(1, 3, rep(4, 15))))
-
+# ylab <- textGrob(label = "Difference in Percent Change", rot = 90, 
+#                  gp = gpar(fontsize = 12))
+# posval <- textGrob(label = sapply(strwrap("Less Constriction in User", width = 15, simplify = F),
+#                                   paste, collapse = "\n"), rot = 0, 
+#                  gp = gpar(fontsize = 8))
+# negval <- textGrob(label = sapply(strwrap("More Constriction in User", width = 15, simplify = F),
+#                                   paste, collapse = "\n"), rot = 0, 
+#                  gp = gpar(fontsize = 8))
+# 
+# post_occ_coef <- grid.arrange(ylab, posval, negval, post_occ_plt, 
+#                               ncol = 2, nrow = 2, 
+#                               layout_matrix = rbind(c(1, 2, rep(4, 15)), c(1, 3, rep(4, 15))))
+# 
+# post_dly_coef <- grid.arrange(ylab, posval, negval, post_dly_plt, 
+#                               ncol = 2, nrow = 2, 
+#                               layout_matrix = rbind(c(1, 2, rep(4, 15)), c(1, 3, rep(4, 15))))
+post_occ_plt
 ```
 
 Plot difference between daily and occasional user
