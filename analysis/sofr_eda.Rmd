@@ -1,0 +1,291 @@
+---
+title: "explosring SoFR results"
+author: "JW"
+date: "`r Sys.Date()`"
+output:
+  html_document: 
+    code_folding: hide
+    toc: true
+    toc_float: true
+hitheme: tomorrow
+highlighter: highlight.js
+---
+
+
+```{r setup, include=FALSE}
+library(mgcv)
+library(tidyverse)
+library(refund)
+library(patchwork)
+library(viridis)
+library(pROC)
+
+
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 9,
+  fig.height = 4,
+  fig.path = '../figs/'
+)
+
+theme_set(theme_bw() + theme(legend.position = "bottom"))
+```
+
+# Load data
+
+Data has been processed and cleaned by Suni
+
+```{r}
+data_folder <- "/Users/wrobelj/Data/2022/PupilLightReflex/" 
+
+# load trajectories at post event
+post <- readRDS(here::here(data_folder, "PupilLightReflex_POST_rightEye_20221208.rds")) %>% 
+  select(user_cat = user_cat.x, subject_id, frame, percent_change)
+```
+
+
+Function to process data for use in GAM and refund models
+
+```{r}
+process_sofr = function(df, last_frame = 375){
+  sofr_df = df %>%
+    filter(frame <= last_frame) %>%
+    mutate(smoker = ifelse(user_cat %in% c("occasional", "daily"), 1, 0)) %>%
+    select(subject_id, smoker, frame, percent_change) %>%
+    pivot_wider(names_from = frame, values_from = percent_change, 
+                names_prefix = "frame_")
+
+    pupil_mat = sofr_df %>% select(starts_with("frame")) %>% as.matrix()
+
+# reorganize data for use with refund::pfr() function
+  sofr_df = sofr_df %>%
+    select(-starts_with("frame")) %>%
+    mutate(percent_change = I(pupil_mat))
+  
+  ncols = ncol(pupil_mat)
+
+  sind <- seq(0, 1, len = ncols)
+  smat <- matrix(sind, nrow(sofr_df), ncols, byrow = TRUE)
+
+  #sofr_df$Zraw <- I(as.matrix(sofr_right_post))
+  sofr_df$smat <- I(smat)
+  sofr_df$lmat <- I(matrix(1/ncols, nrow(sofr_df), ncols))
+  sofr_df$zlmat <- I(sofr_df$lmat * sofr_df$percent_change)
+  
+  sofr_df
+
+}
+
+```
+
+
+
+# scalar on function regression
+
+
+## GAM appoach
+
+With 375 frames (includes lots of zeros at the tail)
+
+```{r}
+df_375 = process_sofr(post, last_frame = 375)
+
+gam_mod_375 <- gam(smoker ~ s(smat, by=zlmat, bs = "cr", k = 30), 
+                   data= df_375,
+                   method = "REML", family = binomial)
+summary(gam_mod_375)
+
+roc_in_sample <- roc(gam_mod_375$model$smoker, gam_mod_375$fitted.values)
+auc(roc_in_sample)
+```
+
+
+Constructing plot 
+
+```{r}
+df_sofr <- data.frame("smat" = seq(0, 1, length.out = ncol(df_375$percent_change)),
+                      "zlmat" = 1)
+sofr_pred <- predict(gam_mod_375, newdata = df_sofr, , se.fit = TRUE, type = "iterms")
+plot.sofr <- data.frame("frame" = 0:(ncol(df_375$percent_change) - 1),
+                            "f0" = sofr_pred$fit[, 1],
+                            'f0.se' = sofr_pred$se.fit[, 1])
+
+p375 = ggplot(data = plot.sofr, aes(x=frame, y = exp(f0)))+
+  geom_line()+
+  geom_line(aes(x=frame, y = exp(f0-2*f0.se)), linetype = 'longdash')+
+  geom_line(aes(x=frame, y = exp(f0+2*f0.se)), linetype = 'longdash')+
+  geom_hline(yintercept = 1, color = "red", linetype = 3) +
+  ylim(0,10) +
+  labs(title = "Odd Ratio of being smoker vs. non, 375 frames")+
+  theme_bw()
+```
+
+
+If you limit to 350 frames you get results that look how we would expect. The AUC is also higher. First run the model.
+
+```{r}
+df_350 = process_sofr(post, last_frame = 350)
+
+gam_mod_350 <- gam(smoker ~ s(smat, by=zlmat, bs = "cr", k = 30), 
+                   data= df_350,
+                   method = "REML", family = binomial)
+summary(gam_mod_350)
+
+roc_in_sample <- roc(gam_mod_350$model$smoker, gam_mod_350$fitted.values)
+auc(roc_in_sample)
+```
+
+constructing plot
+
+```{r}
+df_sofr <- data.frame("smat" = seq(0, 1, length.out = ncol(df_350$percent_change)),
+                      "zlmat" = 1)
+sofr_pred <- predict(gam_mod_350, newdata = df_sofr, , se.fit = TRUE, type = "iterms")
+plot.sofr <- data.frame("frame" = 0:(ncol(df_350$percent_change) - 1),
+                            "f0" = sofr_pred$fit[, 1],
+                            'f0.se' = sofr_pred$se.fit[, 1])
+
+p350 = ggplot(data = plot.sofr, aes(x=frame, y = exp(f0)))+
+  geom_line()+
+  geom_line(aes(x=frame, y = exp(f0-2*f0.se)), linetype = 'longdash')+
+  geom_line(aes(x=frame, y = exp(f0+2*f0.se)), linetype = 'longdash')+
+  geom_hline(yintercept = 1, color = "red", linetype = 3) +
+  ylim(0,10) +
+  labs(title = "Odd Ratio of being smoker vs. non, 350 frames")+
+  theme_bw()
+```
+
+
+Now show both plots. 
+
+```{r, fig.width = 10}
+p375 + p350
+
+```
+
+
+## refund approach
+
+Note that I didn't exponentiate here so these are log odds ratios, but the shapes are similar to what we see with the GAM approach.
+
+375 frames
+
+```{r}
+pfr_mod = pfr(smoker ~ lf(percent_change, k = 30, bs = "ps"),
+              data = df_375)
+
+summary(pfr_mod)
+
+plot(pfr_mod)
+```
+
+350 frames
+
+```{r}
+pfr_mod = pfr(smoker ~ lf(percent_change, k = 30, bs = "ps"),
+              data = df_350)
+
+summary(pfr_mod)
+
+plot(pfr_mod)
+```
+
+
+# Explanation?
+
+I suspect this is just a sample size issue since you lose 25 more subjects when you have the higher number of frames.
+
+```{r}
+df_375[complete.cases(df_375),] %>% nrow()
+
+df_350[complete.cases(df_350),] %>% nrow()
+```
+
+
+If I rerun the analysis using data that carried the last value forward such that no subjects are missing values, the results are as follows:
+
+```{r}
+# impute missing values using FPCA
+post_wide =  post %>%
+  select(subject_id, user_cat, frame, percent_change) %>%
+  pivot_wider(names_from = frame, values_from = percent_change, 
+              names_prefix = "frame_")  %>%
+  select(-subject_id)
+
+
+fpc_obj = fpca.face(as.matrix(post_wide[,-1]))
+
+post_imputed = post %>%
+  mutate(Yhat = as.vector(t(fpc_obj$Yhat)),
+         percent_change = ifelse(is.na(percent_change), Yhat, percent_change),
+         #percent_change = Yhat
+         )
+
+```
+
+
+plot the imputed data
+
+```{r spag_imputed}
+p1 = post %>%
+  ggplot(aes(frame, percent_change, group = subject_id)) +
+  geom_line(alpha = 0.5) +
+  xlim(200, 400) +
+  ggtitle("not imputed")
+
+p2 = post_imputed %>%
+  ggplot(aes(frame, percent_change, group = subject_id)) +
+  geom_line(alpha = 0.5) +
+  xlim(200, 400) +
+  ggtitle("imputed")
+
+
+p3 = post_imputed %>%
+  ggplot(aes(frame, Yhat, group = subject_id)) +
+  geom_line(alpha = 0.5) +
+  xlim(200, 400) +
+  ggtitle("yhat from fpca")
+
+p1 + p2 + p3
+```
+
+
+
+Run gam model
+
+```{r}
+
+df_imputed = process_sofr(post_imputed, last_frame = 375)
+gam_mod_imp <- gam(smoker ~ s(smat, by=zlmat, bs = "cr", k = 30), 
+                   data= df_imputed,
+                   method = "REML", family = binomial)
+summary(gam_mod_imp)
+
+roc_in_sample <- roc(gam_mod_imp$model$smoker, gam_mod_imp$fitted.values)
+auc(roc_in_sample)
+```
+
+plot
+
+```{r sofr_impute}
+df_sofr <- data.frame("smat" = seq(0, 1, length.out = ncol(df_imputed$percent_change)),
+                      "zlmat" = 1)
+sofr_pred <- predict(gam_mod_imp, newdata = df_sofr, se.fit = TRUE, type = "iterms")
+plot.sofr <- data.frame("frame" = 0:(ncol(df_imputed$percent_change) - 1),
+                            "f0" = sofr_pred$fit[, 1],
+                            'f0.se' = sofr_pred$se.fit[, 1])
+
+ggplot(data = plot.sofr, aes(x=frame, y = exp(f0)))+
+  geom_line()+
+  geom_line(aes(x=frame, y = exp(f0-2*f0.se)), linetype = 'longdash')+
+  geom_line(aes(x=frame, y = exp(f0+2*f0.se)), linetype = 'longdash')+
+  geom_hline(yintercept = 1, color = "red", linetype = 3) +
+  ylim(0,10) +
+  labs(title = "Odd Ratio of being smoker vs. non, imputed")+
+  theme_bw()
+
+```
+
+
+
