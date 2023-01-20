@@ -37,7 +37,7 @@ theme_set(theme_bw() + theme(legend.position = "bottom"))
 Data has been processed and cleaned by Suni
 
 ```{r}
-data_folder <- "/Users/wrobelj/Data/2022/PupilLightReflex/" 
+data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data/202208_PupilLightReflex" 
 
 # load trajectories at post event
 post <- readRDS(here::here(data_folder, "PupilLightReflex_POST_rightEye_20221208.rds")) %>% 
