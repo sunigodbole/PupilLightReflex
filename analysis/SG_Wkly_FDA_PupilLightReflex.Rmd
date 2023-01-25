@@ -4112,3 +4112,73 @@ post_dlyocc_coef <- grid.arrange(ylab, posval, negval, post_dlyocc_plt,
 
 post_dlyocc_coef
 ```
+
+```{r post_gam_intPCTT_smokers}
+pt.analytic.df$smoker <- ifelse(pt.analytic.df$user_cat == "non-user", 0, 1)
+
+pt.analytic.df$smoke_PCTT <- pt.analytic.df$smoker*pt.analytic.df$postConsumpTimeToTest_c
+pt.analytic.df$smoke_PCTT[pt.analytic.df$user == "non-user"] <- 0
+
+
+by(data = pt.analytic.df$postConsumpTimeToTest_c, INDICES = pt.analytic.df$smoker, FUN = summary)
+
+
+post_intPCTT_smoke.gam.df <- merge(right_0.post, pt.analytic.df,
+                             by = c("subject_id", "user_cat", "eye"))
+
+# right_0.gam.df <- right_0.gam.df[order(right_0.gam.df$subject_id, right_0.gam.df$frame), ]
+post_intPCTT_smoke.gam.df$sind <- post_intPCTT_smoke.gam.df$frame/400
+
+# head(right_0.gam.df)
+
+m.post_intPCTT_smoke_gam <- mgcv::bam(percent_change ~ s(sind, k=30, bs="cr") +
+                                  s(sind, by=smoker, k=30, bs = "cr") +
+                                  s(sind, by=smoke_PCTT, k=30, bs = "cr"), 
+                                data = post_intPCTT_smoke.gam.df, method = "REML")
+summary(m.post_intPCTT_smoke_gam)
+
+## Create a matrix of residuals
+post_intPCTT_smoke_gam.resid <- cbind(post_intPCTT_smoke.gam.df[!(is.na(post_intPCTT_smoke.gam.df$percent_change)), 
+                                       c("subject_id", "frame")],
+                                m.post_intPCTT_smoke_gam$residuals)
+names(post_intPCTT_smoke_gam.resid) <- c("subject_id", "frame", "resid")
+# post_gam.resid$frame_char <- str_pad(post_gam.resid$frame, width = 3, side = "left", pad = "0")
+
+resid_mat <- reshape(post_intPCTT_smoke_gam.resid[, c("subject_id", "frame", "resid")], 
+                     timevar = "frame", 
+                     idvar = "subject_id", 
+                     direction = "wide")
+rownames(resid_mat) <- resid_mat$subject_id
+resid_mat$subject_id <- NULL
+# resid_names <- names(resid_mat)
+# resid_names <- sort(resid_names)
+# resid_mat <- resid_mat[, resid_names]
+
+resid_mat <- as.matrix(resid_mat)
+
+post_intPCTT_smoke_gam.fpca <- fpca.face(resid_mat, knots = 15)
+
+#Create data frame of eigen functions and attach to original data
+Phi_mat <- as.data.frame(post_intPCTT_smoke_gam.fpca$efunctions)
+colnames(Phi_mat) <- paste0("Phi", seq(1, post_intPCTT_smoke_gam.fpca$npc))
+Phi_mat$frame <- as.numeric(rownames(Phi_mat)) -1
+
+post_intPCTT_smoke.gam.df <- merge(post_intPCTT_smoke.gam.df, Phi_mat, 
+                        by = "frame", 
+                        all.x = T)
+
+post_intPCTT_smoke.gam.df <- post_intPCTT_smoke.gam.df[order(post_intPCTT.gam.df$subject_id,
+                                                             post_intPCTT.gam.df$frame), ]
+post_intPCTT_smoke.gam.df$subject_id <- as.factor(post_intPCTT_smoke.gam.df$subject_id)
+
+post_intPCTT_smoke.gam.fri <- mgcv::bam(percent_change ~ 
+                            s(sind, k=30, bs="cr") +
+                            s(sind, by=smoker, k=30, bs = "cr") +
+                            s(sind, by=smoke_PCTT, k=30, bs = "cr") +
+                            s(subject_id, by = Phi1, bs="re") + s(subject_id, by = Phi2, bs="re")+
+                            s(subject_id, by = Phi3, bs="re") + s(subject_id, by = Phi4, bs="re"), 
+                          method = "fREML", data = post_intPCTT_smoke.gam.df, discrete = TRUE)
+
+
+summary(post_intPCTT_smoke.gam.fri)
+```
