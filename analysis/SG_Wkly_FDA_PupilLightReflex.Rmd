@@ -3033,11 +3033,12 @@ ggplot(data = plot.sofr, aes(x=frame/300, y = f0))+
 sofr_impute_df <- right_0.post.w[, pctChg_names]
 rownames(right_0.post.w$subject_id)
 
-sofr_fpca <- fpca.face(as.matrix(sofr_impute_df))$Yhat
-names(sofr_fpca) <- names(sofr_impute_df)
+sofr_fpca <- fpca.face(as.matrix(sofr_impute_df))
+sofr_fpca2 <- sofr_fpca$Yhat
+names(sofr_fpca2) <- names(sofr_impute_df)
 
 sofr_imputed <- sofr_impute_df
-sofr_imputed[is.na(sofr_imputed)] <-  sofr_fpca[is.na(sofr_imputed)]
+sofr_imputed[is.na(sofr_imputed)] <-  sofr_fpca2[is.na(sofr_imputed)]
 
 ncols = ncol(sofr_imputed)
 
