@@ -17,6 +17,8 @@ output:
 1. Try different number of basis functions start with 15 go to 30
 2. Write down mathematical interpretation of the plots.
 3. Scalar on Function Regression - Plot
+    + Re-run with fpca imputed data
+    +  **It might be worth you exploring the intuition behind this a bit more by making spaghetti plots of the functions that are produced by applying the quadrature weights to the original trajectories**
 4. Regression using VAS score to define "high" vs "not" in all smokers
     + Scatterplot of VAS vs point of minimal constriction for all smokers 
 5. Time from Consumption to test -- WPD add FoSR
@@ -44,15 +46,12 @@ output:
       + Daily user: 25 ng/ml THC
 
 # Task Worked On From Last Week:
-1. Impute with average for frames with missing values between known values
-2. Scalar on Function Regression
-    + Truncate all data to end of file with very little missing data
-    + Zsm - not needed
-    + Zlmat -- use raw data not smooth because have already been smoothed
-3. Regression using VAS score to define "high" vs "not" in occasional smokers
-    + Plot trajectories for "high" and "not" occcasional smokers
-4. Time from Consumption to test -- WPD add FoSR
-    + Interaction term with user category and Post consumption Time to Test
+1. Post Consumption Time to Test Analysis
+  + model 1: run a model that includes non-users, a main effect for smokers, and an interaction between PCTT and smokers 
+  + model 2: subset to just the smokers. Run model with intercept and PCTT- consider a nonlinear term for PCTT since model 1 as we have specified it so far does not let the effect of PCTT on pupil size change nonlinearly, and I suspect that that effect may in fact not be linear
+  +make plots from model 1 and model 2 of average pupil trajectory at different values of PCTT- at, say, 55 minutes, 60 minutes, 65 minutes post smoking. I attached a plot of roughly what I have in mind.
+
+
 
 ## Comments for Ben
 + Correcting export error leading to NA in frame numbers
@@ -2975,16 +2974,21 @@ smk.df$smoker <- ifelse(pt.analytic.df$user_cat %in% c("daily", "occasional"), 1
 
 # Zsm <- post_right_0.fpca$Yhat
 
-pctChg_names <- names(right_0.post.w)[4:379]
-sofr_right_post <-  right_0.post.w[, pctChg_names]
+pctChg_names <- names(right_0.post.w)[grepl("percent_change", names(right_0.post.w)) == T]
 
-sind <- seq(0, 1, len = 376)
-smat <- matrix(sind, nrow(smk.df), 376, byrow = T)
+### Truncate to 350 frames
+frame_max = 350
+pctChg_names_350 <- pctChg_names[as.numeric(substr(pctChg_names, 16, 18)) <= frame_max]
+sofr_right_post <-  right_0.post.w[, pctChg_names_350]
+
+ncols = length(pctChg_names_350)
+sind <- seq(0, 1, len = ncols)
+smat <- matrix(sind, nrow(smk.df), ncols, byrow = T)
 
 # smk.df$Zsm <- I(Zsm)
 smk.df$Zraw <- I(as.matrix(sofr_right_post))
 smk.df$smat <- I(smat)
-smk.df$lmat <- I(matrix(1/376, nrow(smk.df), 376))
+smk.df$lmat <- I(matrix(1/ncols, nrow(smk.df), ncols))
 smk.df$zlmat <- I(smk.df$lmat * smk.df$Zraw)
 
 smk_fglm_ps <- gam(smoker ~ s(smat, by=zlmat, bs = "cr", k = 30), data=smk.df, 
@@ -2995,13 +2999,12 @@ roc_in_sample <- roc(smk_fglm_ps$model$smoker, smk_fglm_ps$fitted.values)
 auc(roc_in_sample)
 ```
 
-```{r plotSoFR, eval = F}
-
+```{r plotSoFR_350, eval = F}
 df_sofr <- data.frame("smat" = sind, "zlmat" = 1)
 
 sofr_pred <- predict(smk_fglm_ps, newdata = df_sofr, , se.fit = TRUE, type = "iterms")
 
-plot.sofr <- data.frame("frame" = 0:375,
+plot.sofr <- data.frame("frame" = 0:(ncols -1),
                             "f0" = sofr_pred$fit[, 1],
                             'f0.se' = sofr_pred$se.fit[, 1])
 
@@ -3009,16 +3012,50 @@ ggplot(data = plot.sofr, aes(x=frame, y = exp(f0)))+
   geom_line()+
   geom_line(aes(x=frame, y = exp(f0-2*f0.se)), linetype = 'longdash')+
   geom_line(aes(x=frame, y = exp(f0+2*f0.se)), linetype = 'longdash')+
-  labs(title = "Odd Ratio (?) of being a smoker vs non-smoker over the test duration")+
+  geom_hline(yintercept = 1, color = "red", linetype = 3)+ 
+  labs(title = "Odd Ratio of being a smoker vs non-smoker over the test duration", 
+       x = "frame")+
   theme_bw()
 
 ggplot(data = plot.sofr, aes(x=frame/300, y = f0))+
   geom_line()+
-  geom_line(aes(x=frame, y = f0-2*f0.se), linetype = 'longdash')+
-  geom_line(aes(x=frame, y = f0+2*f0.se), linetype = 'longdash')+
-  labs(title = "Odd Ratio (?) of being a smoker vs non-smoker over the test duration")+
+  geom_line(aes(x=frame/300, y = f0-2*f0.se), linetype = 'longdash')+
+  geom_line(aes(x=frame/300, y = f0+2*f0.se), linetype = 'longdash')+
+  geom_hline(yintercept = 1, color = "red", linetype = 3)+
+  labs(title = "Odd Ratio of being a smoker vs non-smoker over the test duration", 
+       x = "seconds")+
   theme_bw()
 
+```
+
+### SOFR with fPCA imputed data -- all participants
+```{r sofr_fpcaImpute}
+sofr_impute_df <- right_0.post.w[, pctChg_names]
+rownames(right_0.post.w$subject_id)
+
+sofr_fpca <- fpca.face(as.matrix(sofr_impute_df))$Yhat
+names(sofr_fpca) <- names(sofr_impute_df)
+
+sofr_imputed <- sofr_impute_df
+sofr_imputed[is.na(sofr_imputed)] <-  sofr_fpca[is.na(sofr_imputed)]
+
+ncols = ncol(sofr_imputed)
+
+sind <- seq(0, 1, len = ncols)
+smat <- matrix(sind, nrow(smk.df), ncols, byrow = T)
+
+# smk.df$Zsm <- I(Zsm)
+smk.df$Zraw <- I(as.matrix(sofr_imputed))
+smk.df$smat <- I(smat)
+smk.df$lmat <- I(matrix(1/ncols, nrow(smk.df), ncols))
+smk.df$zlmat <- I(smk.df$lmat * smk.df$Zraw)
+
+smk_fglm_ps2 <- gam(smoker ~ s(smat, by=zlmat, bs = "cr", k = 30), data=smk.df, 
+                   method = "REML", family = binomial)
+summary(smk_fglm_ps2)
+
+roc_in_sample2 <- roc(smk_fglm_ps2$model$smoker, smk_fglm_ps2$fitted.values)
+auc(roc_in_sample2)
 ```
 
 
@@ -3998,8 +4035,9 @@ post_userTraj <- grid.arrange(arrangeGrob(post_userProfile+theme(legend.position
 
 
 ```{r coef_effect_plots_intPCTT}
-
-df_pred_occInt <- data.frame("sind" = unique(post_intPCTT.gam.df$sind), "occasional" = 0, "daily" = 0, "occ_PCTT" = 10, "dly_PCTT" = 0,
+df_pred_occInt <- data.frame("sind" = unique(post_intPCTT.gam.df$sind), 
+                             "occasional" = 0, "daily" = 0, 
+                             "occ_PCTT" = 10, "dly_PCTT" = 0,
                             "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, "Phi4" = 0, 
                           "subject_id" = post_intPCTT.gam.df$subject_id[1])
 
@@ -4011,8 +4049,8 @@ pred_f1 <- predict(post_intPCTT_gam.fri, newdata=df_pred_occInt, se.fit=TRUE, ty
 pred_coef_df <- data.frame(seconds = seq(0, 400)/30,
                            # f0_hat = lpmat_non %*% post_gam.coef, 
                            # f0_se = sqrt(diag(lpmat_non %*% post_gam.cov %*% t(lpmat_non))), 
-                           f1_hat = pred_f1$fit[, 1], 
-                           f1_se = pred_f1$se.fit[, 1]
+                           f1_hat = pred_f1$fit[, 4], 
+                           f1_se = pred_f1$se.fit[, 4]
                            # ,
                            # f2_hat = pred_f2$fit[, 3],
                            # f2_se = pred_f2$se.fit[, 3]
