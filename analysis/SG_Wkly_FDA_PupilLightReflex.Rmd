@@ -138,6 +138,7 @@ library(gridExtra)
 library(haven)
 library(Hmisc)
 library(ggpmisc)
+library(viridis)
 
 knitr::opts_chunk$set(
   warning = FALSE,
@@ -631,6 +632,24 @@ g_legend<-function(a.gplot){
   return(legend)}
 ```
 
+```{r, pcPlotFxn, echo = F}
+pcPlot.fxn <- function(df, errband, labtitle, ymin, ymax){
+  colors <- c("Pop.Mean" = "black", "+2SD" = "red", "-2SD" = "blue")
+  
+  ggplot(data = df, aes(x = seconds, y = mu))+
+    geom_line(aes(color = "Pop.Mean"))+
+    geom_line(aes(x = seconds, y = mu + {{errband}}, color = "+2SD"))+
+    geom_line(aes(x = seconds, y = mu - {{errband}}, color = "-2SD"))+
+    labs(x = "seconds", 
+         y = "Percent Change", 
+         color = "Legend", 
+         title = labtitle)+
+    scale_color_manual(values = colors)+
+    scale_y_continuous(limits = c(ymin, ymax))+
+    theme_bw()
+}
+```
+
 Truncating to frame 400
 ```{r fPCA_all, fig.height = 8, fig.width = 20}
 right_0.fpca <- fpca.face(Y = as.matrix(right_0.w[, 4:404]), pve = 0.95, knots = 30, var = T)
@@ -658,86 +677,30 @@ ylim_min =  min(df_plot$mu) - max(df_plot [, c("errband1", "errband2","errband3"
 
 colors <- c("Pop.Mean" = "black", "+2SD" = "red", "-2SD" = "blue")
 
-pcPlot.fxn <- function(df, errband, labtitle){
-  # colors <- c("Pop.Mean" = "black", "+2SD" = "red", "-2SD" = "blue")
-  
-  ggplot(data = data, aes(x = seconds, y = mu))+
-    geom_line(aes(color = "black"))+
-    geom_line(aes(x = seconds, y = mu + {{errband}}, color = "red"))+
-    geom_line(aes(x = seconds, y = mu - {{errband}}, color = "blue"))+
-    labs(x = "seconds", 
-         y = "Percent Change", 
-         color = "Legend", 
-         title = labtitle)+
-    # scale_color_manual(values = colors)+
-    scale_y_continuous(limits = c(ylim_min, ylim_max))+
-    theme_bw()
-}
-
 plot_pc1 <- pcPlot.fxn(df = df_plot, errband = errband1, 
                        labtitle = paste("PC1:", "% Var Explained:", 
-                                        right_0.fpca.pve[1]))
-plot_pc1
+                                        right_0.fpca.pve[1]), 
+                       ymin = ylim_min, ymax = ylim_max)
 
-plot_pc1 <- ggplot(data = df_plot, aes(x = seconds, y = mu))+
-  geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = seconds, y = mu+errband1, color = "+2SD"))+
-  geom_line(aes(x = seconds, y = mu-errband1, color = "-2SD"))+
-  labs(x = "seconds", 
-       y = "Percent Change", 
-       color = "Legend", 
-       title = paste("PC1:", "% Var Explained:", right_0.fpca.pve[1]))+
-  scale_color_manual(values = colors)+
-  scale_y_continuous(limits = c(ylim_min, ylim_max))+
-  theme_bw()
+plot_pc2 <- pcPlot.fxn(df = df_plot, errband = errband2, 
+                       labtitle = paste("PC2:", "% Var Explained:", 
+                                        right_0.fpca.pve[2]), 
+                       ymin = ylim_min, ymax = ylim_max)
 
-plot_pc2 <- ggplot(data = df_plot, aes(x = seconds, y = mu))+
-  geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = seconds, y = mu+errband2, color = "+2SD"))+
-  geom_line(aes(x = seconds, y = mu-errband2, color = "-2SD"))+
-  labs(x = "seconds", 
-       y = "Percent Change", 
-       color = "Legend", 
-       title = paste("PC2:", "% Var Explained:", right_0.fpca.pve[2]))+
-  scale_color_manual(values = colors)+
-  scale_y_continuous(limits = c(ylim_min, ylim_max))+
-  theme_bw()
+plot_pc3 <- pcPlot.fxn(df = df_plot, errband = errband3, 
+                       labtitle = paste("PC3:", "% Var Explained:", 
+                                        right_0.fpca.pve[3]), 
+                       ymin = ylim_min, ymax = ylim_max)
 
-plot_pc3 <- ggplot(data = df_plot, aes(x = seconds, y = mu))+
-  geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = seconds, y = mu+errband3, color = "+2SD"))+
-  geom_line(aes(x = seconds, y = mu-errband3, color = "-2SD"))+
-  labs(x = "seconds", 
-       y = "Percent Change", 
-       color = "Legend", 
-       title = paste("PC3:", "% Var Explained:", right_0.fpca.pve[3]))+
-  scale_color_manual(values = colors)+
-  scale_y_continuous(limits = c(ylim_min, ylim_max))+
-  theme_bw()
+plot_pc4 <- pcPlot.fxn(df = df_plot, errband = errband4, 
+                       labtitle = paste("PC4:", "% Var Explained:", 
+                                        right_0.fpca.pve[4]), 
+                       ymin = ylim_min, ymax = ylim_max)
 
-plot_pc4 <- ggplot(data = df_plot, aes(x = seconds, y = mu))+
-  geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = seconds, y = mu+errband4, color = "+2SD"))+
-  geom_line(aes(x = seconds, y = mu-errband4, color = "-2SD"))+
-  labs(x = "seconds", 
-       y = "Percent Change", 
-       color = "Legend", 
-       title = paste("PC4:", "% Var Explained:", right_0.fpca.pve[4]))+
-  scale_color_manual(values = colors)+
-  scale_y_continuous(limits = c(ylim_min, ylim_max))+
-  theme_bw()
-
-plot_pc5 <- ggplot(data = df_plot, aes(x = seconds, y = mu))+
-  geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = seconds, y = mu+errband5, color = "+2SD"))+
-  geom_line(aes(x = seconds, y = mu-errband5, color = "-2SD"))+
-  labs(x = "seconds",
-       y = "Percent Change",
-       color = "Legend",
-       title = paste("PC5:", "% Var Explained:", right_0.fpca.pve[5]))+
-  scale_color_manual(values = colors)+
-  scale_y_continuous(limits = c(ylim_min, ylim_max))+
-  theme_bw()
+plot_pc5 <- pcPlot.fxn(df = df_plot, errband = errband5, 
+                       labtitle = paste("PC5:", "% Var Explained:", 
+                                        right_0.fpca.pve[5]), 
+                       ymin = ylim_min, ymax = ylim_max)
 
 legend_postPC <- g_legend(plot_pc1)
 
@@ -786,7 +749,7 @@ highPC2.df <- data.frame(subject_id = substr(highPC2, 1, 7),
 
 for(i in 1:nrow(highPC2.df)){
   plot.df <- right_0.df[right_0.df$subject_id == highPC2.df$subject_id[i] & right_0.df$tp == highPC2.df$tp[i], ]
-  print(ggplot(plot.df, aes(x=frame30, y = percent_change, group = subject_id, color = subject_id))+
+  print(ggplot(plot.df, aes(x=frame, y = percent_change, group = subject_id, color = subject_id))+
           geom_line(show.legend = FALSE)+
           labs(title = paste("Percent Change for high PC2 score --", "Subject:",
                              highPC2.df$subject_id[i], "Timepoint:", highPC2.df$tp[i]), 
@@ -995,6 +958,8 @@ right_0.pt.w <- merge(right_0.pt.w, pt.df[, c("subject_id", "user_cat")],
                      all.x = T)
 
 rownames(right_0.pt.w) <- right_0.pt.w$subject_id
+
+pt.analytic.df <- pt.df[pt.df$subject_id %in% analytic.N,]
 ```
 
 Send Merged dataset to Dr. Wrobel (20221128)
@@ -1011,7 +976,7 @@ saveRDS(right_0.post, file.path(data_folder, ps_folder,
 saveRDS(right_0.pt, file.path(data_folder, ps_folder,
                                 "PupilLightReflex_WPD_rightEye_20221208.rds"))
 
-saveRDS(pt.df[pt.df$subject_id %in% analytic.N,], file.path(data_folder, ps_folder,
+saveRDS(pt.analytic.df, file.path(data_folder, ps_folder,
                                 "PupilLightReflex_PtData_20221208.rds"))
 
 ```
@@ -1190,79 +1155,35 @@ wi.ylim_max = max(wi.df_plot$mu) + max(wi.df_plot [, c("errband1", "errband2","e
 wi.ylim_min =  min(wi.df_plot$mu) - max(wi.df_plot [, c("errband1", "errband2","errband3","errband4","errband5", "errband6")], na.rm = T)
 
 
-colors <- c("Pop.Mean" = "black", "+2SD" = "red", "-2SD" = "blue")
+wi.plot_pc1 <- pcPlot.fxn(df = wi.df_plot, errband = errband1, 
+                       labtitle = paste("PC1:", "% Var Explained:", 
+                                        right_0_wi.fpca.pve[1]), 
+                       ymin = wi.ylim_min, ymax = wi.ylim_max)
 
-wi.plot_pc1 <- ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
-  geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = seconds, y = mu+errband1, color = "+2SD"))+
-  geom_line(aes(x = seconds, y = mu-errband1, color = "-2SD"))+
-  labs(x = "frame", 
-       y = "Percent Change", 
-       color = "Legend", 
-       title = paste("PC1:", "% Var Explained:", right_0_wi.fpca.pve[1]))+
-  scale_color_manual(values = colors)+
-  scale_y_continuous(limits = c(wi.ylim_min, wi.ylim_max))+
-  theme_bw()
+wi.plot_pc2 <- pcPlot.fxn(df = wi.df_plot, errband = errband2, 
+                       labtitle = paste("PC2:", "% Var Explained:", 
+                                        right_0_wi.fpca.pve[2]), 
+                       ymin = wi.ylim_min, ymax = wi.ylim_max)
 
-wi.plot_pc2 <- ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
-  geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = seconds, y = mu+errband2, color = "+2SD"))+
-  geom_line(aes(x = seconds, y = mu-errband2, color = "-2SD"))+
-  labs(x = "frame", 
-       y = "Percent Change", 
-       color = "Legend", 
-       title = paste("PC2:", "% Var Explained:", right_0_wi.fpca.pve[2]))+
-  scale_color_manual(values = colors)+
-  scale_y_continuous(limits = c(wi.ylim_min, wi.ylim_max))+
-  theme_bw()
+wi.plot_pc3 <- pcPlot.fxn(df = wi.df_plot, errband = errband3, 
+                       labtitle = paste("PC3:", "% Var Explained:", 
+                                        right_0_wi.fpca.pve[3]), 
+                       ymin = wi.ylim_min, ymax = wi.ylim_max)
 
-wi.plot_pc3 <- ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
-  geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = seconds, y = mu+errband3, color = "+2SD"))+
-  geom_line(aes(x = seconds, y = mu-errband3, color = "-2SD"))+
-  labs(x = "frame", 
-       y = "Percent Change", 
-       color = "Legend", 
-       title = paste("PC3:", "% Var Explained:", right_0_wi.fpca.pve[3]))+
-  scale_color_manual(values = colors)+
-  scale_y_continuous(limits = c(wi.ylim_min, wi.ylim_max))+
-  theme_bw()
+wi.plot_pc4 <- pcPlot.fxn(df = wi.df_plot, errband = errband4, 
+                       labtitle = paste("PC4:", "% Var Explained:", 
+                                        right_0_wi.fpca.pve[4]), 
+                       ymin = wi.ylim_min, ymax = wi.ylim_max)
 
-wi.plot_pc4 <- ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
-  geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = seconds, y = mu+errband4, color = "+2SD"))+
-  geom_line(aes(x = seconds, y = mu-errband4, color = "-2SD"))+
-  labs(x = "frame", 
-       y = "Percent Change", 
-       color = "Legend", 
-       title = paste("PC4:", "% Var Explained:", right_0_wi.fpca.pve[4]))+
-  scale_color_manual(values = colors)+
-  scale_y_continuous(limits = c(wi.ylim_min, wi.ylim_max))+
-  theme_bw()
+wi.plot_pc5 <- pcPlot.fxn(df = wi.df_plot, errband = errband5, 
+                       labtitle = paste("PC5:", "% Var Explained:", 
+                                        right_0_wi.fpca.pve[5]), 
+                       ymin = wi.ylim_min, ymax = wi.ylim_max)
 
-wi.plot_pc5 <- ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
-  geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = seconds, y = mu+errband5, color = "+2SD"))+
-  geom_line(aes(x = seconds, y = mu-errband5, color = "-2SD"))+
-  labs(x = "frame", 
-       y = "Percent Change", 
-       color = "Legend", 
-       title = paste("PC5:", "% Var Explained:", right_0_wi.fpca.pve[5]))+
-  scale_color_manual(values = colors)+
-  scale_y_continuous(limits = c(wi.ylim_min, wi.ylim_max))+
-  theme_bw()
-
-wi.plot_pc6 <- ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
-  geom_line(aes(color = "Pop.Mean"))+
-  geom_line(aes(x = seconds, y = mu+errband6, color = "+2SD"))+
-  geom_line(aes(x = seconds, y = mu-errband6, color = "-2SD"))+
-  labs(x = "frame", 
-       y = "Percent Change", 
-       color = "Legend", 
-       title = paste("PC6:", "% Var Explained:", right_0_wi.fpca.pve[6]))+
-  scale_color_manual(values = colors)+
-  scale_y_continuous(limits = c(wi.ylim_min, wi.ylim_max))+
-  theme_bw()
+wi.plot_pc6 <- pcPlot.fxn(df = wi.df_plot, errband = errband6, 
+                       labtitle = paste("PC6:", "% Var Explained:", 
+                                        right_0_wi.fpca.pve[6]), 
+                       ymin = wi.ylim_min, ymax = wi.ylim_max)
 
 legend_wiPC <- g_legend(wi.plot_pc1)
 
@@ -1353,7 +1274,7 @@ ggplot(data = wi.df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
   geom_line(aes(x = seconds, y = mu+errband1, color = "+2SD"))+
   geom_line(aes(x = seconds, y = mu-errband1, color = "-2SD"))+
-  labs(x = "frame", 
+  labs(x = "seconds", 
        y = "Percent Change", 
        color = "Legend", 
        title = "Individuals in the Top 5th Percentile of PC1 scores")+
@@ -1551,7 +1472,9 @@ Jagged changes in the mean function lines seems to stem from missing data at tho
 ## POST DATA: Logistic Regression models to predict Smoker vs non-smoker using post data. plot AUC
 
 ```{r fpca_post, echo = F}
-post_right_0.fpca <- fpca.face(Y = as.matrix(right_0.post.w[, 4:404]), pve = 0.95, knots = 30, var = T)
+pctChg_vars <- names(right_0.post.w)[grepl("percent_change", names(right_0.post.w))]
+post_right_0.fpca <- fpca.face(Y = as.matrix(right_0.post.w[, pctChg_vars]), 
+                               pve = 0.95, knots = 30, var = T)
 
 post_right_0.fpca.pve <- round(post_right_0.fpca$evalues/sum(post_right_0.fpca$evalues)*100, 2)
 # post_right_0.fpca.pve
@@ -1624,29 +1547,88 @@ wpd_auc$wpd_SF_aucScores <- pt.wi.scalar.roc2$original.predictor
 wi.auc.scalars <- pt.wi.scalar.roc2$auc
 auc.df <- rbind(auc.df, c("W/I Diff AUC Scalar Feat", wi.auc.scalars))
 auc.df$AUC <- as.numeric(auc.df$AUC)
+```
 
 
-jpeg(file.path(res_folder, "AUC_4PC_ScalarFeatures.jpg"), 
-     height = 6, width = 8, res = 300, units = "in")
-plot.roc(pt.scores.roc, main = "Prediction of Smoker by PCs and Scalar Features in Post and WPD")
-plot.roc(pt.scalar.roc, main = "", add = T, col = "darkred")
+```{r auc_plot_all}
+roc.col <- viridis(5)
+# jpeg(file.path(res_folder, "AUC_4PC_ScalarFeatures.jpg"), 
+#      height = 6, width = 8, res = 300, units = "in")
+plot.roc(pt.scores.roc, main = "Prediction of Smoker by PCs and Scalar Features in Post and WPD", 
+         col = roc.col[1])
+plot.roc(pt.scalar.roc, main = "", add = T, col = roc.col[2])
 plot.roc(pt.wi.scores.roc2, 
-         col = "darkblue", 
+         col = roc.col[3], 
          add = T)
 
 plot.roc(pt.wi.scalar.roc2, 
-         col = "darkgreen",
+         col = roc.col[4],
          add = T)
 legend(0.5, 0.35, legend = c(paste0("post PCs AUC: ",round(post.auc.pc4, 3)),
                                  paste0("post Scalar Features AUC: ",round(post.auc.scalar, 3)), 
                                  paste0("WPD PCs AUC: ", round(wi.auc.pcs, 3)),
                                  paste0("WPD Scalar Features AUC: ", round(wi.auc.scalars, 3))),
-       col = c("black", "darkred", "darkblue", "darkgreen"), 
+       col = roc.col[1:4], 
        lty = rep(1, 4), cex = 0.8, bty="n")
-dev.off()
+# dev.off()
 
 auc_inference <- merge(auc_inference, wpd_auc, 
                        by = c("subject_id", "smoker"))
+```
+
+## SoFR for prediction of smoking
+
+Another method that can be used to predict smoking status is a scalar-on-function regression model which uses differences between the whole trajectories to determine smoking status. However, when there are missing values (due to different test durations), all trajectories should be truncated to the shortest or the values should be imputed with fPCA. (See exploration of using SoFR line starting at 3000) 
+
+```{r sofr_fpcaImpute}
+sofr_impute_df <- right_0.post.w[, pctChg_vars]
+rownames(sofr_impute_df) <- rownames(right_0.post.w)
+
+sofr_fpca <- fpca.face(as.matrix(sofr_impute_df))
+sofr_fpca2 <- sofr_fpca$Yhat
+names(sofr_fpca2) <- names(sofr_impute_df)
+
+sofr_imputed <- sofr_impute_df
+sofr_imputed[is.na(sofr_imputed)] <-  sofr_fpca2[is.na(sofr_imputed)]
+
+ncols = ncol(sofr_imputed)
+
+smk.df <- pt.analytic.df[, c("subject_id", "user_cat")]
+smk.df$smoker <- ifelse(pt.analytic.df$user_cat %in% c("daily", "occasional"), 1, 0)
+
+sind <- seq(0, 1, len = ncols)
+smat <- matrix(sind, nrow(smk.df), ncols, byrow = T)
+
+# smk.df$Zsm <- I(Zsm)
+smk.df$Zraw <- I(as.matrix(sofr_imputed))
+smk.df$smat <- I(smat)
+smk.df$lmat <- I(matrix(1/ncols, nrow(smk.df), ncols))
+smk.df$zlmat <- I(smk.df$lmat * smk.df$Zraw)
+
+smk_fglm_ps2 <- gam(smoker ~ s(smat, by=zlmat, bs = "cr", k = 30), data=smk.df, 
+                   method = "REML", family = binomial)
+summary(smk_fglm_ps2)
+
+pt.sofr.roc <- roc(smk_fglm_ps2$model$smoker, smk_fglm_ps2$fitted.values)
+pt.sofr.roc.auc <- auc(pt.sofr.roc)
+
+auc.df <- rbind(auc.df, c("Post SoFR AUC", pt.sofr.roc.auc))
+```
+
+
+```{r auc_plot_post}
+# jpeg(file.path(res_folder, "AUC_4PC_ScalarFeatures.jpg"), 
+#      height = 6, width = 8, res = 300, units = "in")
+plot.roc(pt.scores.roc, main = "Prediction of Smoker in Post Data with \nPCs, Scalar Features and SoFR Model", 
+         col = roc.col[1])
+plot.roc(pt.scalar.roc, main = "", add = T, col = roc.col[2])
+plot.roc(pt.sofr.roc, main = "", add = T, col = roc.col[5])
+legend(0.5, 0.35, legend = c(paste0("post PCs AUC: ",round(post.auc.pc4, 3)),
+                             paste0("post Scalar Features AUC: ",round(post.auc.scalar, 3)),
+                             paste0("post SoFR AUC: ", round(pt.sofr.roc.auc, 3))),
+       col = roc.col[c(1:2,5)], 
+       lty = rep(1, 3), cex = 0.8, bty="n")
+# dev.off()
 ```
 
 ## Compare AUC across models
@@ -1904,26 +1886,38 @@ chart.Correlation(pt.scores[, c("min_constriction.post", "duration.post",
 
 
 ```{r demogAssoc_post}
-post.age.m <- lm(demo_age ~ PC1 + PC2 + PC3 + PC4, data = pt.scores)
-summary(post.age.m)
+var.int <- c("demo_age", "demo_weight", "demo_height", "thc_chg", "postConsumpTimeToTest", "male")
 
-post.wt.m <- lm(demo_weight ~ PC1 + PC2 + PC3 + PC4, data = pt.scores)
-summary(post.wt.m)
+lm.demog.post.df <- data.frame("est" = numeric(), 
+                               "se" = numeric(), 
+                               "test.stat" = numeric(), 
+                               "pval" = numeric(), 
+                               "iv" = character(), 
+                               "dv" = character(), 
+                               stringsAsFactors = F)
 
-post.ht.m <- lm(demo_height ~ PC1 + PC2 + PC3 + PC4, data = pt.scores)
-summary(post.ht.m)
-
-post.bmi.m <- lm(BMI ~ PC1 + PC2 + PC3 + PC4, data = pt.scores)
-summary(post.bmi.m)
-
-post.thc.m <- lm(thc_chg ~ PC1 + PC2 + PC3 + PC4, data = pt.scores)
-summary(post.thc.m)
-
-post.consump.m <- lm(postConsumpTimeToTest ~ PC1 + PC2 + PC3 + PC4, data = pt.scores)
-summary(post.consump.m)
-
-post.male.m <- glm(male ~ PC1 + PC2 + PC3 + PC4, family = "binomial", data = pt.scores)
-summary(post.male.m)
+for(i in var.int){
+  if(i != "male"){
+    m <- lm(as.formula(paste0(i, "~ PC1 + PC2 + PC3 + PC4")), 
+                 data = pt.scores)
+    res1.df <- as.data.frame(summary(m)$coefficients)
+    names(res1.df) <- c("est", "se", "test.stat", "pval")
+    res1.df$iv <- rownames(res1.df)
+    res1.df$dv <- i
+    lm.demog.post.df <- rbind(lm.demog.post.df, res1.df)
+  } else(
+    if(i == "male"){
+      m <- glm(as.formula(paste0(i, "~ PC1 + PC2 + PC3 + PC4")),
+              family = "binomial",
+              data = pt.scores)
+      res1.df <- as.data.frame(summary(m)$coefficients)
+      names(res1.df) <- c("est", "se", "test.stat", "pval")
+      res1.df$iv <- rownames(res1.df)
+      res1.df$dv <- i
+      lm.demog.post.df <- rbind(lm.demog.post.df, res1.df)
+    }
+  )
+}
 ```
 
 ### Within Person Difference Data
@@ -1952,26 +1946,39 @@ chart.Correlation(pt.wi.scores[, c("min_constriction_chg", "AUC_chg", "duration_
 ```
 
 ```{r demogAssoc_wi}
-wi.age.m <- lm(demo_age ~ PC1 + PC2 + PC3 + PC4, data = pt.wi.scores)
-summary(wi.age.m)
+var.int <- c("demo_age", "demo_weight", "demo_height", "thc_chg", 
+             "postConsumpTimeToTest", "male")
 
-wi.wt.m <- lm(demo_weight ~ PC1 + PC2 + PC3 + PC4, data = pt.wi.scores)
-summary(wi.wt.m)
+lm.demog.wpd.df <- data.frame("est" = numeric(), 
+                               "se" = numeric(), 
+                               "test.stat" = numeric(), 
+                               "pval" = numeric(), 
+                               "iv" = character(), 
+                               "dv" = character(), 
+                               stringsAsFactors = F)
 
-wi.ht.m <- lm(demo_height ~ PC1 + PC2 + PC3 + PC4, data = pt.wi.scores)
-summary(wi.ht.m)
-
-wi.bmi.m <- lm(BMI ~ PC1 + PC2 + PC3 + PC4, data = pt.wi.scores)
-summary(wi.bmi.m)
-
-wi.thc.m <- lm(thc_chg ~ PC1 + PC2 + PC3 + PC4, data = pt.wi.scores)
-summary(wi.thc.m)
-
-wi.consump.m <- lm(postConsumpTimeToTest ~ PC1 + PC2 + PC3 + PC4, data = pt.wi.scores)
-summary(wi.consump.m)
-
-wi.male.m <- glm(male ~ PC1 + PC2 + PC3 + PC4, family = "binomial", data = pt.wi.scores)
-summary(wi.male.m)
+for(i in var.int){
+  if(i != "male"){
+    m <- lm(as.formula(paste0(i, "~ PC1 + PC2 + PC3 + PC4")), 
+                 data = pt.wi.scores)
+    res1.df <- as.data.frame(summary(m)$coefficients)
+    names(res1.df) <- c("est", "se", "test.stat", "pval")
+    res1.df$iv <- rownames(res1.df)
+    res1.df$dv <- i
+    lm.demog.wpd.df <- rbind(lm.demog.wpd.df, res1.df)
+  } else(
+    if(i == "male"){
+      m <- glm(as.formula(paste0(i, "~ PC1 + PC2 + PC3 + PC4")),
+              family = "binomial",
+              data = pt.wi.scores)
+      res1.df <- as.data.frame(summary(m)$coefficients)
+      names(res1.df) <- c("est", "se", "test.stat", "pval")
+      res1.df$iv <- rownames(res1.df)
+      res1.df$dv <- i
+      lm.demog.wpd.df <- rbind(lm.demog.wpd.df, res1.df)
+    }
+  )
+}
 ```
 
 Demographic Variables:
@@ -3046,6 +3053,7 @@ summary(smk_fglm_ps)
 roc_in_sample <- roc(smk_fglm_ps$model$smoker, smk_fglm_ps$fitted.values)
 auc(roc_in_sample)
 ```
+
 
 ```{r plotSoFR_350, eval = F}
 df_sofr <- data.frame("smat" = sind, "zlmat" = 1)
