@@ -4305,11 +4305,16 @@ post_smokerProfile.se <- ggplot(data = pred_df, aes(x = seconds, y = mean, group
                               linetype = "longdash")+
                     labs(y = "")+
                     theme_bw()
-                    
+
+jpeg(file.path(res_folder, "RightEye_AverageTrajectories_SmokersPostConsumptionTimetoTest.jpg"),
+     height = 6, width = 23, res = 300, units = "in")
+          
 post_smokerTraj <- grid.arrange(arrangeGrob(post_smokerProfile+theme(legend.position = "none"), 
                                           post_smokerProfile.se+theme(legend.position = "none"), nrow = 1), 
                               legend_smokerProfile, nrow = 1, 
                               widths = c(30, 6))
+
+dev.off()
 ```
 
 ### ONLY smokers
