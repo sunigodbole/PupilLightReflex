@@ -124,7 +124,6 @@ Data on pupil size during light reflex test. Pupil size was extracted at the ima
 1. Can we translate frame into time? Do we need to? -- No need to translate to time dimension, also time drift shouldn't be an issue because duration of test is short
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
 library(openxlsx)
 library(ggplot2)
 library(table1)
@@ -139,6 +138,16 @@ library(gridExtra)
 library(haven)
 library(Hmisc)
 library(ggpmisc)
+
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE,
+  fig.width = 9,
+  fig.height = 4,
+  fig.path = '../figs/'
+)
+
+theme_set(theme_bw() + theme(legend.position = "bottom"))
 
 # ps_folder <- "C:/Repositories/Dissertation/PupilSize_img"
 # data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
@@ -198,7 +207,7 @@ ps$tp <- factor(ps$tp,
 
 ```{r pt_summ}
 # total number of subjects
-length(unique(ps$subject_id))
+# length(unique(ps$subject_id))
 
 # subject level data 
 pt.df <- unique(ps[, c("subject_id", "tp", "user_cat", "demo_age", 
@@ -209,10 +218,10 @@ pt.df <- unique(ps[, c("subject_id", "tp", "user_cat", "demo_age",
 #        data = pt.df[pt.df$tp == "pre2", ])
 
 # number of subjects by timepoint (pre/post)
-table(pt.df$tp)
+# table(pt.df$tp)
 ```
 
-There are more subjects in total than the by time point. Indicating incomplete data with some subjects missing "pre" and others missing "post" measurement.
+There are more subjects in total than by time point. Indicating incomplete data with some subjects missing "pre" and others missing "post" measurement.
 
 Add scalar features for each participant-time point
 ```{r scalarFeat}
@@ -254,15 +263,32 @@ pt.df.w$slope_chg <-  pt.df.w$slope.post - pt.df.w$slope.pre2
 testTimes <- read.xlsx(file.path(data_folder, ps_folder, "All SafetyScan Times_23Aug2022_revSG.xlsx"), 
                        sheet = "Raw")
 
-testTimes$pre_safetyscan_date_convert <- as.Date(testTimes$pre_safetyscan_date, origin = "1899-12-30")
+testTimes$pre_safetyscan_date_convert <- as.Date(testTimes$pre_safetyscan_date, 
+                                                 origin = "1899-12-30")
 
-testTimes$pre_safetyscan_time_convert <- as.POSIXct(paste0(testTimes$pre_safetyscan_date_convert, " ", testTimes$pre_safetyscan_time_hr, ":", testTimes$pre_safetyscan_time_min, ":", "00"), format = "%Y-%m-%d %H:%M:%S")
+testTimes$pre_safetyscan_time_convert <- as.POSIXct(paste0(testTimes$pre_safetyscan_date_convert,
+                                                           " ", testTimes$pre_safetyscan_time_hr,
+                                                           ":", testTimes$pre_safetyscan_time_min,
+                                                           ":", "00"), 
+                                                    format = "%Y-%m-%d %H:%M:%S")
 
-testTimes$consump_start_time_convert <- as.POSIXct(paste0(testTimes$pre_safetyscan_date_convert, " ", testTimes$consump_start_time_hr, ":", testTimes$consump_start_time_min, ":", "00"), format = "%Y-%m-%d %H:%M:%S")
+testTimes$consump_start_time_convert <- as.POSIXct(paste0(testTimes$pre_safetyscan_date_convert,
+                                                          " ", testTimes$consump_start_time_hr, 
+                                                          ":", testTimes$consump_start_time_min,
+                                                          ":", "00"), 
+                                                   format = "%Y-%m-%d %H:%M:%S")
 
-testTimes$consump_end_time_convert <- as.POSIXct(paste0(testTimes$pre_safetyscan_date_convert, " ", testTimes$consump_end_time_hr, ":", testTimes$consump_end_time_min, ":", "00"), format = "%Y-%m-%d %H:%M:%S")
+testTimes$consump_end_time_convert <- as.POSIXct(paste0(testTimes$pre_safetyscan_date_convert,
+                                                        " ", testTimes$consump_end_time_hr, 
+                                                        ":", testTimes$consump_end_time_min, 
+                                                        ":", "00"), 
+                                                 format = "%Y-%m-%d %H:%M:%S")
 
-testTimes$post_safetyscan_time_convert <- as.POSIXct(paste0(testTimes$pre_safetyscan_date_convert, " ", testTimes$post_safetyscan_time_hr, ":", testTimes$post_safetyscan_time_min, ":", "00"), format = "%Y-%m-%d %H:%M:%S")
+testTimes$post_safetyscan_time_convert <- as.POSIXct(paste0(testTimes$pre_safetyscan_date_convert,
+                                                            " ", testTimes$post_safetyscan_time_hr,
+                                                            ":", testTimes$post_safetyscan_time_min,
+                                                            ":", "00"), 
+                                                     format = "%Y-%m-%d %H:%M:%S")
 
 testTimes$postConsumpTimeToTest <- as.numeric(difftime(testTimes$post_safetyscan_time_convert,
                                                        testTimes$consump_end_time_convert,
@@ -294,6 +320,7 @@ non_user.id <- pt.df$subject_id[pt.df$user_cat == "non-user"]
 
 Add VAS data
 ```{r vasReadIn, eval = F}
+### OLD DATA FILE MODIFIED WITH NEW DATA -- NEXT CHUNK
 vs <- read_sas(file.path(data_folder, ps_folder, "urban102.sas7bdat"))
 
 vs <- vs[, c("subject_id", "period", "vas")]
@@ -312,7 +339,7 @@ names(vas.pre)[names(vas.pre) == "vas"] <- "vas.pre"
 vas.w <- merge(vas.pre, vas.post, by = "subject_id")
 
 vas.w$diff <- vas.w$vas.post - vas.w$vas.pre
-summary(vas.w$diff)
+# summary(vas.w$diff)
 ## no difference between pre and post vas
 
 vas.w <- vas.w[, c("subject_id", "vas.pre")]
@@ -493,12 +520,12 @@ Plot of PRE/POST for Right Eye
 ```{r rightEye_plots}
 right.df <- ps[ps$eye == "Right", ]
 
-ggplot(right.df, aes(x=frame/30, y = pupil_size, group = subject_id))+
-  geom_line(show.legend = FALSE, alpha = 0.5)+
-  facet_grid(rows = vars(user_cat), cols = vars(tp))+
-  labs(title ="Pupil Size by Pre/Post and THC use category", 
-       x = "seconds")+
-  theme_bw()
+# ggplot(right.df, aes(x=frame/30, y = pupil_size, group = subject_id))+
+#   geom_line(show.legend = FALSE, alpha = 0.5)+
+#   facet_grid(rows = vars(user_cat), cols = vars(tp))+
+#   labs(title ="Pupil Size by Pre/Post and THC use category", 
+#        x = "seconds")+
+#   theme_bw()
 
 # jpeg(file.path(res_folder, "PrePost_Right_PercentChange.jpg"), 
 #      height = 6, width = 8, res = 300, units = "in")
@@ -630,6 +657,27 @@ ylim_max = max(df_plot$mu) + max(df_plot [, c("errband1", "errband2","errband3",
 ylim_min =  min(df_plot$mu) - max(df_plot [, c("errband1", "errband2","errband3","errband4","errband5")], na.rm = T)
 
 colors <- c("Pop.Mean" = "black", "+2SD" = "red", "-2SD" = "blue")
+
+pcPlot.fxn <- function(df, errband, labtitle){
+  # colors <- c("Pop.Mean" = "black", "+2SD" = "red", "-2SD" = "blue")
+  
+  ggplot(data = data, aes(x = seconds, y = mu))+
+    geom_line(aes(color = "black"))+
+    geom_line(aes(x = seconds, y = mu + {{errband}}, color = "red"))+
+    geom_line(aes(x = seconds, y = mu - {{errband}}, color = "blue"))+
+    labs(x = "seconds", 
+         y = "Percent Change", 
+         color = "Legend", 
+         title = labtitle)+
+    # scale_color_manual(values = colors)+
+    scale_y_continuous(limits = c(ylim_min, ylim_max))+
+    theme_bw()
+}
+
+plot_pc1 <- pcPlot.fxn(df = df_plot, errband = errband1, 
+                       labtitle = paste("PC1:", "% Var Explained:", 
+                                        right_0.fpca.pve[1]))
+plot_pc1
 
 plot_pc1 <- ggplot(data = df_plot, aes(x = seconds, y = mu))+
   geom_line(aes(color = "Pop.Mean"))+
