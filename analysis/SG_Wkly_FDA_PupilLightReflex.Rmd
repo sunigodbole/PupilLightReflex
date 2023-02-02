@@ -997,6 +997,8 @@ post.user <- ggplot(right_0.post, aes(x=seconds, y = percent_change, group = sub
              facet_grid(rows = vars(user_cat))+
              labs(title ="POST data percent change by THC use category")+
              theme_bw()
+
+post.user
 ```
 ## Within Subject 
 ### Mean function
@@ -1009,6 +1011,8 @@ wi.user <- ggplot(right_0.pt, aes(x=seconds, y = wiPctChg, group = subject_id))+
            facet_grid(rows = vars(user_cat))+
            labs(title ="Within subject difference in percent change by THC use category")+
            theme_bw()
+
+wi.user
 # jpeg(file.path(res_folder, "Post_WPD_Trajectories.jpg"), 
 #      height = 5, width = 12, res = 300, units = "in")
 grid.arrange(post.user, wi.user, nrow = 1)
@@ -4362,15 +4366,16 @@ post_smokerProfile.se <- ggplot(data = pred_df, aes(x = seconds, y = mean, group
                     labs(y = "")+
                     theme_bw()
 
-jpeg(file.path(res_folder, "RightEye_AverageTrajectories_SmokersPostConsumptionTimetoTest.jpg"),
-     height = 6, width = 23, res = 300, units = "in")
+# jpeg(file.path(res_folder, "RightEye_AverageTrajectories_SmokersPostConsumptionTimetoTest.jpg"),
+#      height = 6, width = 23, res = 300, units = "in")
           
 post_smokerTraj <- grid.arrange(arrangeGrob(post_smokerProfile+theme(legend.position = "none"), 
                                           post_smokerProfile.se+theme(legend.position = "none"), nrow = 1), 
                               legend_smokerProfile, nrow = 1, 
                               widths = c(30, 6))
 
-dev.off()
+# dev.off()
+post_smokerTraj
 ```
 
 ### ONLY smokers
