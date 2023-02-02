@@ -13,30 +13,41 @@ Pupil size reflex to a light test is a potential test to determine if a person i
 
 ## What is Functional Data Analysis? 
 
-Functional Data analysis (FDA) is a field of statistics that models curves or trajectories of information without extracting pre-defined specific features. It allows us examine the sources of variation of these curves (fPCA), how differences in the patterns of the curves relate to an outcome, and how the patterns of the curves differ based on individual characteristics.   
+Functional Data analysis (FDA) is a field of statistics that models curves or trajectories of information without extracting pre-defined specific features. It allows us to examine the sources of variation of these curves (fPCA), how differences in the patterns of the curves relate to an outcome, and how the patterns of the curves differ based on individual characteristics.   
 
 ## Data summary
 Full pupil trajectories of pupil size during light reflex test. Pupil size was extracted at the image level based on image analysis techniques (Ben Steinhart's video segmentation pipeline). Each test was performed simultaneously on right and left eye before and after THC use (smoking).
 
 + Outcome: percent change from baseline
 + Start at frame 0 
-+ End of test is not strictly defined (with FoS we shouldn't need to define the end of the test)
-+ **Analysis to focus on data from second assessment (after THC use for smokers) of right eye**
++ End of test is not strictly defined (with FoSR we shouldn't need to define the end of the test)
++ **Analysis to focus on data from post assessment of right eye**
 
 
 ## Summary of Findings -- POST data
++ Prediction Analysis (ROC) with full pupil response trajectories, or scalar features
+  + Objective: Define a model that discriminates between smokers and non-smokers
+    + AUC values ranged from 0.68-0.71
+    + The models were not statistically significantly different
++ Function on Scalar Regression (FoSR)
+  + Objective: Model differences in pupil response trajectories by user category  
+    + Significant differences between Occasional and non-Users in the minimal constriction interval
+    + Significant differences between Daily and non-Users in the minimal constriction interval
+    + No significant differences between Occasional and Daily users. 
+  + Objective: Model variations in pupil response trajectories by smokers vs non-smokers  
+    + Significant differences between Smokers and non-Smokers in the minimal constriction interval
+  + New models including Post Consumption time to test (PCTT) for smokers, show similar trajectories but with longer PCTT associated with a stronger minimal constriction
 + Functional principal components analysis (fPCA) 
   + point of minimal constriction and rebound shapes drive the first and second PCs 
-+ Prediction Analysis (ROC)with PCs, scalar features or a scalar-on-function regression model (SoFR)
-  + Limited ability to separate groups with highest AUC for SoFR models (0.68-0.71)
-  + No statistically difference between models with different feature types
-+ BMI associated with PC2 from fPCA analysis
-+ Function on Scalar Regression (FoSR)
-  + Significant differences between Occasional and non-Users in the minimal constriction interval
-  + Significant differences between Smokers and non-Smokers in the minimal constriction interval
-  + New models including Post Consumption time to test (PCTT) for smokers show similar trajectories but with longer PCTT associated with a stronger minimal constriction
+
+
+## Questions for collaborators
++ Paper Development
+  + Target Journal
+  + Focus: In post assessment of pupil response trajectories, there are significant differences between occasional and non-user and smaller significant differences in daily and non-users, but no significant differences between occasional and daily users. These results indicate a reduced effect of tolerance on pupil response trajectory. 
 + VAS (feeling high)
-  + Odd associations in pre- and post- data for occasional users show "feeling higher" correlates with a stronger minimal constriction. Need clarification ?  
+  + Discussed at previous meeting as a potential effect in occasional users. 
+  + Odd associations in pre- and post- data for occasional users show "feeling higher" correlates with a stronger minimal constriction. Need clarification  
 
 
 ```{r setup, include=FALSE}
@@ -73,12 +84,13 @@ pt.analytic.df <- readRDS(file.path(data_folder, ps_folder,
 
 ```
 
-# Exploratory Analysis
+# Exploratory Analysis 
+
+*This is a recap from the previous meeting*
 
 Plot of PRE/POST for Right Eye
 
 We'd examined the plot for the left and right eye and found them to be similar, so for this analysis we'll used data from the right eye.
-
 
 There was some attenuation of the initial light reflex response between pre and post measures in most participants, but there is a lot of variability in the recovery trajectories (both duration and shape). We'll be exploring if these differences are significantly related to the participant's THC use category and if there might be differences by smoker vs non-smoker.
 
@@ -86,72 +98,31 @@ There was some attenuation of the initial light reflex response between pre and 
 
 Most participant's are missing data after frame 400.
 
-![Missingness in Trajectories](../figs/visMissing-1.png)
-
 ## Analytic Sample
 
-There were 84 participants with both pre and post data which constituted the analytic sample. 
-
-```{r tab1, echo = F}
-table1(~demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + Post_PreTime + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg +vas1_high_score + vas_high_score_chg + vas1_score_dc + vas_score_dc_chg|user_cat, 
-       data = pt.analytic.df)
-```
-
-## Post Data and Trajectories 
-![POST Trajectories by User Category](../figs/postPlot-1.png)
-
-Post Data: 
-
-+ Lots of heterogeneity in the post profiles
-+ Seemly like there's more variability in the recovery period for daily user (long duration)
+There were `r nrow(pt.analytic.df)` participants with both pre and post data which constituted the analytic sample. In this sample, there are `r sum(pt.analytic.df$user_cat == "non-user")` non-users, `r sum(pt.analytic.df$user_cat == "occasional")` occasional, and `r sum(pt.analytic.df$user_cat == "daily")` daily users. 
 
 # Analysis
 
-## functional Principal Components Analysis (fPCA)
-Similar to PCA, fPCA is a method to quantify the sources of variation in the data. With fPCA, we're finding functions or "shapes" that describe variation. 
-
-
-### fPCA post data
-Truncating to frame 400
-
-![fPCA POST data](../figs/fPCA_all-3.png)
-
-For the post data: 
-
-+ PC1 seems to show variation in the minimal constriction value. Participants with high loading (+2SD) on PC1 would have a less constriction while participants with a low loading (-2SD) would have a more constriction than an average individual. 
-
-+ PC2 seems to show differences in the the overall shape of the trajectory and the pattern of recovery. High loading indicates a less than average constriction and slow recovery over time (and a double dip), while a low loading indicates more than average constriction and marked recovery over the test period.
-
 ## Prediction Analysis: Smoker vs non-Smoker
 
-Using the PC scores from the fPCA analysis, scalar features and predicted values from a  scalar-on-function (SoFR) regression model in separate logistic regression models, we attempted to classify smokers and non-smokers. A SoFR model, uses the whole pupil change trajectory to model a scalar outcome (e.g. smoker or non-smoker). The SoFR model had the best prediction using an area-under-the-curve (AUC) metric; however these AUCs are not statistically significantly different. 
+3 logistic regression models using one of the following types of variables: 
+
++ PC scores from the fPCA analysis 
++ scalar features from Ben's pipeline (single variables)
++ predicted values from a scalar-on-function (SoFR) regression model. A SoFR model, uses the whole pupil change trajectory to model a scalar outcome (e.g. smoker or non-smoker). 
+
+Using logistic regression models, we attempted to classify smokers and non-smokers.  The SoFR model had the best prediction using an area under the curve (AUC) metric; however the AUC from these models were not statistically significantly different. 
 
 ![ROC Curves](../figs/auc_plot_post-1.png)
 
 ### Scalar on Function Regression (SoFR)
-Scalar on Function Regression (SoFR) is a regression method that regresses a scalar value (eg. smoking status) on the full trajectory of the pupil light reflex (e.g. function). This analysis allows us to examine differences in smoking status by pupil light reflex trajectories. However, missingness in the trajectories (as shown above) has a large effect on the associations produced by the model, so fPCA was used to impute missing values before performing this analysis. 
-
-## Association of PCs and Scalar Features with Demographic Variables
-
-Demographic Variables:
-
-+ Age
-+ Weight
-+ Height
-+ BMI 
-+ Change in THC
-+ Time from consumption to Post test
-+ Sex
-
-Results: 
-
-Regression models regressed demographic variables on the 4 PCs for the post data. 
-
-+ BMI negatively associated with PC2 adjusting for other PCs (p= 0.03)
-
+Scalar on Function Regression (SoFR) is a regression method that regresses a scalar value (eg. smoking status) on the full trajectory of the pupil light reflex (e.g. function). This analysis allows us to examine differences in smoking status by pupil light reflex trajectories. However, missingness in the trajectories has a large effect on the associations produced by the model, so fPCA was used to impute missing values before performing this analysis.
 
 ## Function on Scalar Regression (FoSR)
-Function on Scalar Regression (FoSR) is a regression method that regresses the full trajectory of the pupil light reflex (e.g. function) on set of scalar predictor, in this case THC user category and accounts for the between subject variability with a random effect term. This analysis allows us to examine differences in trajectories or parts of the trajectory by THC user group.   
+Function on Scalar Regression (FoSR) is a regression method that regresses the full trajectory of the pupil light reflex (e.g. function) on set of scalar predictor, in this case THC user category and accounts for the between subject variability with a random effect term. This analysis allows us to examine differences in trajectories or parts of the trajectory by THC user group.
+
++ In this analysis, we found significant differences between occasional and non-users and smaller significant differences between daily and non-users in the time period related to minimal constriction. There were no significant differences between occasional and daily users. 
 
 ### Differences by User Category
 
@@ -169,12 +140,13 @@ There is statistically significant difference in trajectories between daily and 
 
 ![Differences in Occasional and Daily Users](../figs/diff_dly_occ-2.png)
 
-There is not statistically significant difference in trajectories between occasional and daily users. 
+There is not statistically significant difference in trajectories between occasional and daily users.
+
 ### Differences by Smoking Status
 
-![Average Trajectory by Smoking Status](../figs/plot_smk-1.png)
+![](../figs/plot_smk-1.png)
 
-![Differences between Smoker and non-Smokers](../figs/smk_coef_effect_plots-1.png)
+![](../figs/smk_coef_effect_plots-1.png)
 
 There is statistically significant difference in trajectories between smokers and non-smokers from approximately 2 to 3 seconds, which corresponds to the minimal constriction value. 
 
@@ -186,29 +158,43 @@ To examine the effect of post consumption time to test (PCTT) on the pupil traje
 
 ![Average Trajectory of non-Smokers and Smokers with varying PCTT](../figs/post_smoke_PCTT_traj-1.png)
 
-As seen above, this models showed a stronger minimal constriction in non-smokers and small differences between smokers based on PCTT, with longer PCTT corresponding to average trajectories with stronger minimal constriction; however these effects do not appear to be statistically significant. 
+As seen above, this model showed a stronger minimal constriction in non-smokers and small differences between smokers based on PCTT, with longer PCTT corresponding to average trajectories with stronger minimal constriction; however these effects do not appear to be statistically significant. 
 
-Additionally, using only smokers we fit an interaction model with PCTT and pupil trajectories. 
+We need to explore allowing the shape of the trajectories to vary by PCTT and time using a joint functional model for these two variables. 
 
-![Average Trajectory of Smoker and PCTT](../figs/post_OnlySmoke_PCTT_traj-1.png)
+## functional Principal Components Analysis (fPCA)
+Similar to PCA, fPCA is a method to quantify the sources of variation in the data. With fPCA, we're finding functions or "shapes" that describe variation. 
 
-In these models, we saw the same effect of PCTT but again lacking statistical significance.  
 
-We need to explore allowing the shape of the trajectories to vary by PCTT and time using a joint functional models for these two variables. 
+### fPCA post data
+Truncating to frame 400
+
+![fPCA POST data](../figs/fPCA_all-3.png)
+
+For the post data: 
+
++ PC1 seems to show variation in the minimal constriction value. Participants with high loading (+2SD) on PC1 would have a less constriction while participants with a low loading (-2SD) would have a more constriction than an average individual. 
+
++ PC2 seems to show differences in the the overall shape of the trajectory and the pattern of recovery. High loading indicates a less than average constriction and slow recovery over time (and a double dip), while a low loading indicates more than average constriction and marked recovery over the test period.
+
+## Paper Discussion
+
+1. Focus: In post assessment of pupil response trajectories, there are significant differences between occasional and non-user and smaller significant differences in daily and non-users, but no significant differences between occasional and daily users. These results indicate a reduced effect of tolerance on pupil response trajectory. 
+2. Target Journal?
 
 ## VAS -- Feeling High
 
 The VAS score was used to assess "feeling high" in smokers after THC consumption. In this analysis we are interested in examining differences in pupil trajectories with different values of "feeling high". Initially the VAS score was dichotomized to create a group of "high" vs "not high" participants, and a FoSR model was used to evaluate trajectories in these groups. 
 
-![Pupil Trajectories with VAS scores](../figs/vas_dataplot-1.png)
+![](../figs/vas_dataplot-1.png)
 
 Unexpectedly, as seen in the plot, users that felt more high had a stronger minimal constriction, so we decided to examine the scalar feature of minimal constriction along with user category in the for both pre- and post- time points and difference between them, as shown in the following series of plots.
 
-![VAS All Users](../figs/plot_VAS_minConstrict-1.png)
-![VAS Occasional Users](../figs/plot_VAS_minConstrict-2.png)
+![](../figs/plot_VAS_minConstrict-1.png)
+![](../figs/plot_VAS_minConstrict-2.png)
 
 
-![VAS Daily Users](../figs/plot_VAS_minConstrict-3.png)
+![](../figs/plot_VAS_minConstrict-3.png)
 
 In these plots we see a odd negative correlation in occasional users, with a higher VAS score associated with a stronger minimal constriction. 
 

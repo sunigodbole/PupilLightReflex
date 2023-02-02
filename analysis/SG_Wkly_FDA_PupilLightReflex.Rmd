@@ -2282,6 +2282,7 @@ post_userProfile <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = us
                     geom_line()+
                     labs(y = "Percent Change")+
                     theme_bw()
+post_userProfile
 
 legend_userProfile <- g_legend(post_userProfile)
 
@@ -2293,7 +2294,8 @@ post_userProfile.se <- ggplot(data = pred_df, aes(x = seconds, y = mean, group =
                               linetype = "longdash")+
                     labs(y = "")+
                     theme_bw()
-                    
+post_userProfile.se
+
 post_userTraj <- grid.arrange(arrangeGrob(post_userProfile+theme(legend.position = "none"), 
                                           post_userProfile.se+theme(legend.position = "none"), nrow = 1), 
                               legend_userProfile, nrow = 1, 
@@ -2501,6 +2503,7 @@ post_smkProfile <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = use
                                                  max(pred_df$mean+2*pred_df$se)))+
                    labs(y = "Percent Change")+
                    theme_bw()
+post_smkProfile
 
 legend_smkProfile <- g_legend(post_smkProfile)
 
@@ -2514,11 +2517,12 @@ post_smkProfile.se <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = 
                                                     max(pred_df$mean+2*pred_df$se)))+
                       labs(y = "")+
                       theme_bw()
-
+post_smkProfile.se
 post_smk <- grid.arrange(arrangeGrob(post_smkProfile+theme(legend.position = "none"), 
                                      post_smkProfile.se+theme(legend.position = "none"), nrow = 1), 
                          legend_smkProfile, nrow = 1, 
                          widths = c(30, 6))
+post_smk
 ```
 
 
@@ -3058,6 +3062,37 @@ roc_in_sample <- roc(smk_fglm_ps$model$smoker, smk_fglm_ps$fitted.values)
 auc(roc_in_sample)
 ```
 
+### Exploring quadrature weights applied to original trajectories
+```{r quadwt}
+Zraw <- I(as.matrix(right_0.post.w[, pctChg_names]))
+ncols = ncol(Zraw)
+lmat <- I(matrix(1/ncols, 84, ncols))
+zlmat <- I(lmat * Zraw)
+
+
+zlmat <- as.data.frame(cbind(zlmat))
+var.names <- names(zlmat)
+zlmat$pt_id <- rownames(zlmat)
+
+zlmat.l <- reshape(zlmat, 
+                   varying = var.names, 
+                   v.names = "pctChg", 
+                   timevar = "frame", 
+                   times = seq(0,400), 
+                   direction = "long")
+
+zlmat.l <- zlmat.l[order(zlmat.l$pt_id, zlmat.l$frame), ]
+zlmat.l$id <- NULL
+
+ggplot(data = zlmat.l, aes(x=frame, y = pctChg, group = pt_id))+
+  geom_line()+
+  theme_bw()
+
+ggplot(data = right_0.post, aes(x=frame, y= percent_change, group = subject_id))+
+  geom_line()+
+  theme_bw()
+```
+
 
 ```{r plotSoFR_350, eval = F}
 df_sofr <- data.frame("smat" = sind, "zlmat" = 1)
@@ -3118,7 +3153,6 @@ summary(smk_fglm_ps2)
 roc_in_sample2 <- roc(smk_fglm_ps2$model$smoker, smk_fglm_ps2$fitted.values)
 auc(roc_in_sample2)
 ```
-
 
 ## VAS based "high" vs "not in occasional smokers
 ```{r vas_explore}
@@ -3849,6 +3883,16 @@ ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = p
 ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = postConsumpTimeToTest, y = wpd.PC3, col = user_cat))+
   geom_point()+
   theme_bw()
+
+ggplot(data= pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], 
+       aes(x = postConsumpTimeToTest))+
+  geom_histogram(binwidth = 1)+
+  geom_vline(xintercept = mean(pt.analytic.df$postConsumpTimeToTest, na.rm = T), 
+             col = "darkred")+
+  scale_y_continuous(expand = c(0,0))+
+  labs(x= "Post Consumption Time to Test", 
+       caption = "Red line at mean value")+
+  theme_bw()
 ```
 
 
@@ -4212,6 +4256,7 @@ post_dlyocc_coef <- grid.arrange(ylab, posval, negval, post_dlyocc_plt,
 post_dlyocc_coef
 ```
 
+
 ```{r post_gam_intPCTT_smokers}
 pt.analytic.df$smoker <- ifelse(pt.analytic.df$user_cat == "non-user", 0, 1)
 
@@ -4355,6 +4400,8 @@ post_smokerProfile <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = 
                     labs(y = "Percent Change")+
                     theme_bw()
 
+post_smokerProfile
+
 legend_smokerProfile <- g_legend(post_smokerProfile)
 
 post_smokerProfile.se <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
@@ -4365,6 +4412,7 @@ post_smokerProfile.se <- ggplot(data = pred_df, aes(x = seconds, y = mean, group
                               linetype = "longdash")+
                     labs(y = "")+
                     theme_bw()
+post_smokerProfile.se
 
 # jpeg(file.path(res_folder, "RightEye_AverageTrajectories_SmokersPostConsumptionTimetoTest.jpg"),
 #      height = 6, width = 23, res = 300, units = "in")
@@ -4491,6 +4539,8 @@ post_smokerProfile <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = 
                     labs(y = "Percent Change")+
                     theme_bw()
 
+post_smokerProfile
+
 legend_smokerProfile <- g_legend(post_smokerProfile)
 
 post_smokerProfile.se <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
@@ -4501,6 +4551,7 @@ post_smokerProfile.se <- ggplot(data = pred_df, aes(x = seconds, y = mean, group
                               linetype = "longdash")+
                     labs(y = "")+
                     theme_bw()
+post_smokerProfile.se
                     
 post_OnlysmokerTraj <- grid.arrange(arrangeGrob(post_smokerProfile+theme(legend.position = "none"), 
                                           post_smokerProfile.se+theme(legend.position = "none"), nrow = 1), 
