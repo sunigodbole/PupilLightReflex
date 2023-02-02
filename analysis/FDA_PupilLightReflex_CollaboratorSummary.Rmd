@@ -98,31 +98,12 @@ table1(~demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postCo
 ```
 
 ## Post Data and Trajectories 
-
-```{r postPlot, echo = F, warning=FALSE, fig.height = 6, fig.width = 10}
-post_traj <- ggplot(right_0.post, aes(x=frame/30, y = percent_change, group = subject_id))+
-             geom_line(show.legend = FALSE, alpha = 0.5)+
-             facet_grid(rows = vars(user_cat.x))+
-             labs(title ="POST Data Percent Change by THC", 
-                  y = "Percent Change", 
-                  x = "seconds")+
-             theme_bw()
-
-post_traj
-```
+![POST Trajectories by User Category](../figs/postPlot-1.png)
 
 Post Data: 
 
 + Lots of heterogeneity in the post profiles
 + Seemly like there's more variability in the recovery period for daily user (long duration)
-
-```{r getLegend, echo = F}
-g_legend<-function(a.gplot){
-  tmp <- ggplot_gtable(ggplot_build(a.gplot))
-  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
-  legend <- tmp$grobs[[leg]]
-  return(legend)}
-```
 
 # Analysis
 
@@ -143,14 +124,14 @@ For the post data:
 
 ## Prediction Analysis: Smoker vs non-Smoker
 
-Using the PC scores from the fPCA analysis, scalar features and a scalar-on-function (SoFR) regression model in separate logistic regression models, we attempted to classify smokers and non-smokers. A SoFR model, uses the whole pupil change trajectory to model a scalar outcome (e.g. smoker or non-smoker) and fitted values from the SoFR model were used in the logistic regression predictive model. The SoFR model had the best prediction using an area-under-the-curve (AUC) metric; however these AUCs are not statistically significantly different. 
+Using the PC scores from the fPCA analysis, scalar features and predicted values from a  scalar-on-function (SoFR) regression model in separate logistic regression models, we attempted to classify smokers and non-smokers. A SoFR model, uses the whole pupil change trajectory to model a scalar outcome (e.g. smoker or non-smoker). The SoFR model had the best prediction using an area-under-the-curve (AUC) metric; however these AUCs are not statistically significantly different. 
 
 ![ROC Curves](../figs/auc_plot_post-1.png)
 
 ### Scalar on Function Regression (SoFR)
-Scalar on Function Regression (SoFR) is a regression method that regresses a scalar value (eg. smoking status) on the full trajectory of the pupil light reflex (e.g. function). This analysis allows us to examine smoking status with differences in trajectories.  
+Scalar on Function Regression (SoFR) is a regression method that regresses a scalar value (eg. smoking status) on the full trajectory of the pupil light reflex (e.g. function). This analysis allows us to examine differences in smoking status by pupil light reflex trajectories. However, missingness in the trajectories (as shown above) has a large effect on the associations produced by the model, so fPCA was used to impute missing values before performing this analysis. 
 
-## Association with Demographic Variables
+## Association of PCs and Scalar Features with Demographic Variables
 
 Demographic Variables:
 
@@ -178,38 +159,50 @@ Function on Scalar Regression (FoSR) is a regression method that regresses the f
 
 ![Differences in Occasional and Non-Users](../figs/coef_effect_plots-1.png)
 
+There is statistically significant difference in trajectories between occasional and non-users from approximately 1.5 to 3.75 seconds, which corresponds to the minimal constriction value. 
+
 
 ![Differences in Daily and Non-Users](../figs/coef_effect_plots-2.png)
 
+There is statistically significant difference in trajectories between daily and non-users around 2.4 seconds, which corresponds to the minimal constriction value. 
+
+
 ![Differences in Occasional and Daily Users](../figs/diff_dly_occ-2.png)
 
+There is not statistically significant difference in trajectories between occasional and daily users. 
 ### Differences by Smoking Status
 
 ![Average Trajectory by Smoking Status](../figs/plot_smk-1.png)
 
 ![Differences between Smoker and non-Smokers](../figs/smk_coef_effect_plots-1.png)
 
+There is statistically significant difference in trajectories between smokers and non-smokers from approximately 2 to 3 seconds, which corresponds to the minimal constriction value. 
+
 
 ## Post Consumption Time to Test (PCTT)
 
-To examine the effect of post consumption time to test (PCTT) on the pupil trajectories, we fit a model in smokers and non-smokers with an interaction term for PCTT in smokers. 
+To examine the effect of post consumption time to test (PCTT) on the pupil trajectories, we fit a FoSR model in smokers and non-smokers with an interaction term for PCTT in smokers. 
 
 
 ![Average Trajectory of non-Smokers and Smokers with varying PCTT](../figs/post_smoke_PCTT_traj-1.png)
+
+As seen above, this models showed a stronger minimal constriction in non-smokers and small differences between smokers based on PCTT, with longer PCTT corresponding to average trajectories with stronger minimal constriction; however these effects do not appear to be statistically significant. 
 
 Additionally, using only smokers we fit an interaction model with PCTT and pupil trajectories. 
 
 ![Average Trajectory of Smoker and PCTT](../figs/post_OnlySmoke_PCTT_traj-1.png)
 
+In these models, we saw the same effect of PCTT but again lacking statistical significance.  
+
 We need to explore allowing the shape of the trajectories to vary by PCTT and time using a joint functional models for these two variables. 
 
 ## VAS -- Feeling High
 
-The VAS score was used to assess "feeling high" in smokers after THC consumption. In this analysis we are interested in examining differences in pupil trajectories with different values of "feeling high". Initially the VAS score was dichotomized to create a group of "High" vs "not high" participants, and a FoSR model was used to evaluate trajectories in these groups. 
+The VAS score was used to assess "feeling high" in smokers after THC consumption. In this analysis we are interested in examining differences in pupil trajectories with different values of "feeling high". Initially the VAS score was dichotomized to create a group of "high" vs "not high" participants, and a FoSR model was used to evaluate trajectories in these groups. 
 
 ![Pupil Trajectories with VAS scores](../figs/vas_dataplot-1.png)
 
-Unexpectedly, as seen in the plot, user that felt more high had a stronger minimal constriction, so we decided to examine the scalar feature of minimal constriction along with user category in the for both pre- and post- time points and difference between them, as shown in the following series of plots.
+Unexpectedly, as seen in the plot, users that felt more high had a stronger minimal constriction, so we decided to examine the scalar feature of minimal constriction along with user category in the for both pre- and post- time points and difference between them, as shown in the following series of plots.
 
 ![VAS All Users](../figs/plot_VAS_minConstrict-1.png)
 ![VAS Occasional Users](../figs/plot_VAS_minConstrict-2.png)
