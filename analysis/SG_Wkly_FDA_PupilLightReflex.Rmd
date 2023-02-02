@@ -1580,7 +1580,7 @@ auc_inference <- merge(auc_inference, wpd_auc,
 
 Another method that can be used to predict smoking status is a scalar-on-function regression model which uses differences between the whole trajectories to determine smoking status. However, when there are missing values (due to different test durations), all trajectories should be truncated to the shortest or the values should be imputed with fPCA. (See exploration of using SoFR line starting at 3000) 
 
-```{r sofr_fpcaImpute}
+```{r sofr_fpcaImpute_roc}
 sofr_impute_df <- right_0.post.w[, pctChg_vars]
 rownames(sofr_impute_df) <- rownames(right_0.post.w)
 
