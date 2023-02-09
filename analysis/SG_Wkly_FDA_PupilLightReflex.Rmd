@@ -16,14 +16,9 @@ output:
 # To Do: 
 1. Try different number of basis functions start with 15 go to 30
 2. Write down mathematical interpretation of the plots.
-3. Scalar on Function Regression - Plot
-    + Re-run with fpca imputed data
-    +  **It might be worth you exploring the intuition behind this a bit more by making spaghetti plots of the functions that are produced by applying the quadrature weights to the original trajectories**
-4. Regression using VAS score to define "high" vs "not" in all smokers
-    + Scatterplot of VAS vs point of minimal constriction for all smokers 
-5. Time from Consumption to test -- WPD add FoSR
+3. Time from Consumption to test -- WPD add FoSR
     + How to do effect plots?
-6. Create a document with results to send to the collaborators
+
 
 # Questions for Collaborators
 1. How much time does it take for the effects of marijuana to reduce?
@@ -46,11 +41,10 @@ output:
       + Daily user: 25 ng/ml THC
 
 # Task Worked On From Last Week:
-1. Post Consumption Time to Test Analysis
-  + model 1: run a model that includes non-users, a main effect for smokers, and an interaction between PCTT and smokers 
-  + model 2: subset to just the smokers. Run model with intercept and PCTT- consider a nonlinear term for PCTT since model 1 as we have specified it so far does not let the effect of PCTT on pupil size change nonlinearly, and I suspect that that effect may in fact not be linear
-  +make plots from model 1 and model 2 of average pupil trajectory at different values of PCTT- at, say, 55 minutes, 60 minutes, 65 minutes post smoking. I attached a plot of roughly what I have in mind.
-
+1. Scalar on Function Regression - Plot
+    +  **It might be worth you exploring the intuition behind this a bit more by making spaghetti plots of the functions that are produced by applying the quadrature weights to the original trajectories**
+2. Try FoSR model with non-linear effect of PCTT. 
+3. Create a document with results to send to the collaborators
 
 
 ## Comments for Ben
@@ -3062,37 +3056,6 @@ roc_in_sample <- roc(smk_fglm_ps$model$smoker, smk_fglm_ps$fitted.values)
 auc(roc_in_sample)
 ```
 
-### Exploring quadrature weights applied to original trajectories
-```{r quadwt}
-Zraw <- I(as.matrix(right_0.post.w[, pctChg_names]))
-ncols = ncol(Zraw)
-lmat <- I(matrix(1/ncols, 84, ncols))
-zlmat <- I(lmat * Zraw)
-
-
-zlmat <- as.data.frame(cbind(zlmat))
-var.names <- names(zlmat)
-zlmat$pt_id <- rownames(zlmat)
-
-zlmat.l <- reshape(zlmat, 
-                   varying = var.names, 
-                   v.names = "pctChg", 
-                   timevar = "frame", 
-                   times = seq(0,400), 
-                   direction = "long")
-
-zlmat.l <- zlmat.l[order(zlmat.l$pt_id, zlmat.l$frame), ]
-zlmat.l$id <- NULL
-
-ggplot(data = zlmat.l, aes(x=frame, y = pctChg, group = pt_id))+
-  geom_line()+
-  theme_bw()
-
-ggplot(data = right_0.post, aes(x=frame, y= percent_change, group = subject_id))+
-  geom_line()+
-  theme_bw()
-```
-
 
 ```{r plotSoFR_350, eval = F}
 df_sofr <- data.frame("smat" = sind, "zlmat" = 1)
@@ -4557,4 +4520,138 @@ post_OnlysmokerTraj <- grid.arrange(arrangeGrob(post_smokerProfile+theme(legend.
                                           post_smokerProfile.se+theme(legend.position = "none"), nrow = 1), 
                               legend_smokerProfile, nrow = 1, 
                               widths = c(30, 6))
+```
+
+
+### ONLY smokers -- non-linear effect of PCTT
+```{r post_gam_intPCTT_ONLYsmokersINT}
+### Subset to only smokers and remove previously calculated "Phi" values
+post_intPCTT_smoke.gam.df <- post_intPCTT_smoke.gam.df[post_intPCTT_smoke.gam.df$smoker == 1, ] 
+keep.vars <- names(post_intPCTT_smoke.gam.df)[grepl("Phi", names(post_intPCTT_smoke.gam.df)) == FALSE]
+post_intPCTT_smoke.gam.df <- post_intPCTT_smoke.gam.df[, keep.vars]
+
+post_intPCTT_smoke.gam.df <- post_intPCTT_smoke.gam.df[!(is.na(post_intPCTT_smoke.gam.df$sind)), ]
+
+# head(right_0.gam.df)
+
+m.post_intPCTT_smoke_gamInt <- mgcv::bam(percent_change ~ s(sind, bs = "cr", k = 30)+
+                                        ti(sind, postConsumpTimeToTest_c, 
+                                                          k=c(30, 5), bs=c("cr", "cr"),
+                                                          mc=c(FALSE, TRUE)),
+                                data = post_intPCTT_smoke.gam.df, method = "fREML", discrete = TRUE)
+summary(m.post_intPCTT_smoke_gamInt)
+
+## Create a matrix of residuals
+post_intPCTT_smoke_gam.resid <- cbind(post_intPCTT_smoke.gam.df[!(is.na(post_intPCTT_smoke.gam.df$percent_change)), 
+                                       c("subject_id", "frame")],
+                                m.post_intPCTT_smoke_gamInt$residuals)
+names(post_intPCTT_smoke_gam.resid) <- c("subject_id", "frame", "resid")
+# post_gam.resid$frame_char <- str_pad(post_gam.resid$frame, width = 3, side = "left", pad = "0")
+
+resid_mat <- reshape(post_intPCTT_smoke_gam.resid[, c("subject_id", "frame", "resid")], 
+                     timevar = "frame", 
+                     idvar = "subject_id", 
+                     direction = "wide")
+rownames(resid_mat) <- resid_mat$subject_id
+resid_mat$subject_id <- NULL
+# resid_names <- names(resid_mat)
+# resid_names <- sort(resid_names)
+# resid_mat <- resid_mat[, resid_names]
+
+resid_mat <- as.matrix(resid_mat)
+
+post_intPCTT_smoke_gam.fpca <- fpca.face(resid_mat, knots = 15)
+
+#Create data frame of eigen functions and attach to original data
+Phi_mat <- as.data.frame(post_intPCTT_smoke_gam.fpca$efunctions)
+colnames(Phi_mat) <- paste0("Phi", seq(1, post_intPCTT_smoke_gam.fpca$npc))
+Phi_mat$frame <- as.numeric(rownames(Phi_mat)) -1
+
+post_intPCTT_smoke.gam.df <- merge(post_intPCTT_smoke.gam.df, Phi_mat, 
+                        by = "frame", 
+                        all.x = T)
+
+post_intPCTT_smoke.gam.df <- post_intPCTT_smoke.gam.df[order(post_intPCTT_smoke.gam.df$subject_id,
+                                                             post_intPCTT_smoke.gam.df$frame), ]
+post_intPCTT_smoke.gam.df$subject_id <- as.factor(post_intPCTT_smoke.gam.df$subject_id)
+
+post_intPCTT_smoke.gam.fri <- mgcv::bam(percent_change ~ 
+                            s(sind, k=30, bs="cr") +
+                            s(sind, by=postConsumpTimeToTest_c, k=5, bs = "cr") +
+                            ti(sind, postConsumpTimeToTest_c,
+                               k=c(30, 5), bs=c("cr", "cr"), mc=c(FALSE, TRUE))+
+                            s(subject_id, by = Phi1, bs="re") + s(subject_id, by = Phi2, bs="re")+
+                            s(subject_id, by = Phi3, bs="re") + s(subject_id, by = Phi4, bs="re"), 
+                          method = "fREML", data = post_intPCTT_smoke.gam.df, discrete = TRUE)
+
+
+summary(post_intPCTT_smoke.gam.fri)
+```
+
+### Try to plot Additive Functional Regression
+```{r plot_addFunc}
+cal_grid <- function(grid_length = 100, lo_x = 1, high_x, range_s = 1){
+    tind_pred <- seq(0, range_s, length.out = grid_length)
+    xind_pred <- seq(lo_x, high_x, length.out = grid_length)
+    grid_coef <- data.frame(t_int = rep(tind_pred, grid_length),
+                            func_cov = rep(xind_pred, each = grid_length))
+    return(grid_coef)
+}
+
+grid_coef <- cal_grid(grid_length = 100, lo_x = min(pt.analytic.df$postConsumpTimeToTest_c, na.rm = T), 
+                      high_x = max(pt.analytic.df$postConsumpTimeToTest_c, na.rm = T), 
+                      range_s = 1)
+grid_coef$Phi1 <- 0
+grid_coef$Phi2 <- 0
+grid_coef$Phi3 <- 0
+grid_coef$Phi4 <- 0
+
+names(grid_coef) <- c("sind", "postConsumpTimeToTest_c", "Phi1", "Phi2", "Phi3", "Phi4")
+grid_coef$subject_id <- pt.analytic.df$subject_id[1]
+
+pred_coef <- predict(post_intPCTT_smoke.gam.fri, newdata = grid_coef, type = "terms")
+
+
+```
+
+### Exploring quadrature weights applied to original trajectories
+```{r quadwt}
+Zraw <- I(as.matrix(right_0.post.w[, pctChg_names]))
+ncols = ncol(Zraw)
+lmat <- I(matrix(1/ncols, nrow(Zraw), ncols))
+zlmat <- I(lmat * Zraw)
+
+
+zlmat <- as.data.frame(cbind(zlmat))
+var.names <- names(zlmat)
+zlmat$pt_id <- rownames(zlmat)
+
+zlmat.l <- reshape(zlmat, 
+                   varying = var.names, 
+                   v.names = "pctChg", 
+                   timevar = "frame", 
+                   times = seq(0,400), 
+                   direction = "long")
+
+zlmat.l <- zlmat.l[order(zlmat.l$pt_id, zlmat.l$frame), ]
+zlmat.l$id <- NULL
+
+ggplot(data = zlmat.l, aes(x=frame, y = pctChg, group = pt_id))+
+  geom_line()+
+  theme_bw()
+
+test <- aggregate(frame ~ pt_id, data = zlmat.l[!(is.na(zlmat.l$pctChg)), ], FUN = "max")
+
+ggplot(data = right_0.post, aes(x=frame, y= percent_change, group = subject_id))+
+  geom_line()+
+  theme_bw()
+
+ggplot(data = zlmat.l[zlmat.l$pt_id == "001-011", ], aes(x=frame, y = pctChg, group = pt_id))+
+  geom_line()+
+  theme_bw()
+
+ggplot(data = right_0.post[right_0.post$subject_id == "001-011", ], aes(x=frame, y= percent_change, 
+                                                                        group = subject_id))+
+  geom_line()+
+  theme_bw()
 ```
