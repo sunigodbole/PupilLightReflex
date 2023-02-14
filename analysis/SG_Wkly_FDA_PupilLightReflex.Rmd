@@ -4388,6 +4388,119 @@ post_smokerTraj <- grid.arrange(arrangeGrob(post_smokerProfile+theme(legend.posi
 # dev.off()
 post_smokerTraj
 ```
+### Trajectories for smokers and non-smokers with non-linear effect of time and PCTT
+
+```{r post_gam_intPCTT_smokers_NL}
+pt.analytic.df$postConsumpTimeToTest_c[is.na(pt.analytic.df$postConsumpTimeToTest_c)] <- 0
+
+post_intPCTT_smoke.gam.df <- merge(right_0.post, pt.analytic.df,
+                             by = c("subject_id", "user_cat", "eye"))
+
+# right_0.gam.df <- right_0.gam.df[order(right_0.gam.df$subject_id, right_0.gam.df$frame), ]
+post_intPCTT_smoke.gam.df$sind <- post_intPCTT_smoke.gam.df$frame/400
+
+# head(right_0.gam.df)
+
+m.post_intPCTT_smoke_gam_NL <- mgcv::bam(percent_change ~ s(sind, k=30, bs="cr") +
+                                  s(sind, by=smoker, k=30, bs = "cr") +
+                                  ti(sind, postConsumpTimeToTest_c,
+                                     by = smoker, 
+                                     k=c(30, 8), bs=c("cr", "cr"),
+                                     mc=c(FALSE, TRUE)),
+                                data = post_intPCTT_smoke.gam.df, method = "fREML", 
+                                discrete = TRUE)
+
+summary(m.post_intPCTT_smoke_gam_NL)
+
+## Create a matrix of residuals
+post_intPCTT_smoke_gam.resid <- cbind(post_intPCTT_smoke.gam.df[!(is.na(post_intPCTT_smoke.gam.df$percent_change)), 
+                                       c("subject_id", "frame")],
+                                m.post_intPCTT_smoke_gam_NL$residuals)
+names(post_intPCTT_smoke_gam.resid) <- c("subject_id", "frame", "resid")
+# post_gam.resid$frame_char <- str_pad(post_gam.resid$frame, width = 3, side = "left", pad = "0")
+
+resid_mat <- reshape(post_intPCTT_smoke_gam.resid[, c("subject_id", "frame", "resid")], 
+                     timevar = "frame", 
+                     idvar = "subject_id", 
+                     direction = "wide")
+rownames(resid_mat) <- resid_mat$subject_id
+resid_mat$subject_id <- NULL
+# resid_names <- names(resid_mat)
+# resid_names <- sort(resid_names)
+# resid_mat <- resid_mat[, resid_names]
+
+resid_mat <- as.matrix(resid_mat)
+
+post_intPCTT_smoke_gam.fpca <- fpca.face(resid_mat, knots = 15)
+
+#Create data frame of eigen functions and attach to original data
+Phi_mat <- as.data.frame(post_intPCTT_smoke_gam.fpca$efunctions)
+colnames(Phi_mat) <- paste0("Phi", seq(1, post_intPCTT_smoke_gam.fpca$npc))
+Phi_mat$frame <- as.numeric(rownames(Phi_mat)) -1
+
+post_intPCTT_smoke.gam.df <- merge(post_intPCTT_smoke.gam.df, Phi_mat, 
+                        by = "frame", 
+                        all.x = T)
+
+post_intPCTT_smoke.gam.df <- post_intPCTT_smoke.gam.df[order(post_intPCTT_smoke.gam.df$subject_id,
+                                                             post_intPCTT_smoke.gam.df$frame), ]
+post_intPCTT_smoke.gam.df$subject_id <- as.factor(post_intPCTT_smoke.gam.df$subject_id)
+
+post_intPCTT_smoke.gam.fri <- mgcv::bam(percent_change ~ 
+                            s(sind, k=30, bs="cr") +
+                            s(sind, by=smoker, k=30, bs = "cr") +
+                            ti(sind, postConsumpTimeToTest_c,
+                                     by = smoker, 
+                                     k=c(30, 8), bs=c("cr", "cr"),
+                                     mc=c(FALSE, TRUE)) +
+                            s(subject_id, by = Phi1, bs="re") + s(subject_id, by = Phi2, bs="re")+
+                            s(subject_id, by = Phi3, bs="re") + s(subject_id, by = Phi4, bs="re"), 
+                          method = "fREML", data = post_intPCTT_smoke.gam.df, discrete = TRUE)
+
+
+summary(post_intPCTT_smoke.gam.fri)
+```
+```{r plotNL_Effects}
+post_intPCTT_smoke_gam.coef <- post_intPCTT_smoke.gam.fri$coefficients
+post_intPCTT_smoke_gam.cov <- vcov.gam(post_intPCTT_smoke.gam.fri)
+
+sind <- seq(0, 1, length.out = 401)
+PCTT <- c(55,60,65,70) - round(mean(pt.analytic.df$postConsumpTimeToTest, na.rm = T), 2)
+pred.df <- expand.grid(sind=sind, PCTT = PCTT)
+pred.df$smoker <- 1
+
+ns.df <- data.frame("sind" = seq(0, 1, length.out = 401), 
+                    "PCTT" = 0, 
+                    "smoker" = 0)
+
+pred.df <- rbind(pred.df, ns.df)
+
+pred.df$Phi1 <- 0
+pred.df$Phi2 <- 0
+pred.df$Phi3 <- 0
+pred.df$Phi4 <- 0
+pred.df$subject_id <- pt.analytic.df$subject_id[1]
+
+names(pred.df) <- c("sind", "postConsumpTimeToTest_c", "smoker", "Phi1", "Phi2", "Phi3", "Phi4", "subject_id")
+
+all.df <- predict(post_intPCTT_smoke.gam.fri, newdata = pred.df, se.fit=TRUE, type = "lpmatrix")
+
+pred_df <- data.frame(seconds = rep(seq(0, 400), 5)/30,
+                      user = c(rep("smoker-55", 401), 
+                               rep("smoker-60", 401), 
+                               rep("smoker-65", 401), 
+                               rep("smoker-70", 401), 
+                               rep("non-smoker", 401)
+                               ), 
+                      mean = all.df %*% post_intPCTT_smoke_gam.coef, 
+                      se = sqrt(diag(all.df %*% post_intPCTT_smoke_gam.cov %*% t(all.df))), 
+                      stringsAsFactors = F)
+
+ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
+                    geom_line()+
+                    labs(y = "Percent Change")+
+                    theme_bw()
+```
 
 ### ONLY smokers
 ```{r post_gam_intPCTT_ONLYsmokers}
