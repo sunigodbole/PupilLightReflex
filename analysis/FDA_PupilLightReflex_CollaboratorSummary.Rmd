@@ -119,6 +119,7 @@ Using logistic regression models, we attempted to classify smokers and non-smoke
 ### Scalar on Function Regression (SoFR)
 Scalar on Function Regression (SoFR) is a regression method that regresses a scalar value (eg. smoking status) on the full trajectory of the pupil light reflex (e.g. function). This analysis allows us to examine differences in smoking status by pupil light reflex trajectories. However, missingness in the trajectories has a large effect on the associations produced by the model, so fPCA was used to impute missing values before performing this analysis.
 
+
 ## Function on Scalar Regression (FoSR)
 Function on Scalar Regression (FoSR) is a regression method that regresses the full trajectory of the pupil light reflex (e.g. function) on set of scalar predictor, in this case THC user category and accounts for the between subject variability with a random effect term. This analysis allows us to examine differences in trajectories or parts of the trajectory by THC user group.
 
