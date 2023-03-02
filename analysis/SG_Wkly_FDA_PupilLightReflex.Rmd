@@ -1637,6 +1637,18 @@ ggplot(data = plot.sofr, aes(x=frame/30, y = exp(f0)))+
        x = "seconds", 
        y = "Odds Ratio")+
   theme_bw()
+
+plot.sofr$lci <- exp(plot.sofr$f0 - 2*plot.sofr$f0.se)
+plot.sofr$uci <- exp(plot.sofr$f0 + 2*plot.sofr$f0.se)
+
+
+
+plot.sofr$frame[min(plot.sofr$frame[plot.sofr$lci > 1 & plot.sofr$uci > 1])]/30
+plot.sofr$frame[max(plot.sofr$frame[plot.sofr$lci > 1 & plot.sofr$uci > 1])]/30
+
+plot.sofr$frame[min(plot.sofr$frame[plot.sofr$lci < 1 & plot.sofr$uci < 1])]/30
+plot.sofr$frame[max(plot.sofr$frame[plot.sofr$lci < 1 & plot.sofr$uci < 1])]/30
+
 ```
 
 
