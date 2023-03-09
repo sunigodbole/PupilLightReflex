@@ -133,7 +133,7 @@ library(haven)
 library(Hmisc)
 library(ggpmisc)
 library(viridis)
-lib
+library(gtsummary)
 
 knitr::opts_chunk$set(
   warning = FALSE,
@@ -994,14 +994,43 @@ saveRDS(pt.analytic.df, file.path(data_folder, ps_folder,
 No Consumption end time recorded for non-users
 ```{r tab1_analyticN}
 # Demographics Table by User Category
-label(pt.df$demo_age) <- "Age (years)"
-label(pt.df$demo_gender) <- "Sex"
-label(pt.df$BMI) <- "BMI (kg/m^2)"
-label(pt.df$postConsumpTimeToTest) <- "Time Delay After Marijuana Consumption (mins)"
-label(pt.df$thc.post) <- "Blood THC (post consumption)"
+# label(pt.df$demo_age) <- "Age (years)"
+# label(pt.df$demo_gender) <- "Sex"
+# label(pt.df$BMI) <- "BMI (kg/m^2)"
+# label(pt.df$postConsumpTimeToTest) <- "Time Delay After Marijuana Consumption (mins)"
+# label(pt.df$thc.post) <- "Blood THC (post consumption)"
+# 
+# table1(~demo_age + demo_gender + BMI + postConsumpTimeToTest + thc.post|user_cat, 
+#        data = pt.df[pt.df$subject_id %in% analytic.N, ])
 
-table1(~demo_age + demo_gender + BMI + postConsumpTimeToTest + thc.post|user_cat, 
-       data = pt.df[pt.df$subject_id %in% analytic.N, ])
+pt.df$postConsumpTimeToTest[pt.df$user_cat == "non-user"] <- 0
+
+tab1 <- pt.df[pt.df$subject_id %in% analytic.N, c("user_cat", "demo_age", "demo_gender", "BMI", "thc.post", "postConsumpTimeToTest")]
+tab1$demo_gender <- as.character(tab1$demo_gender)
+
+table1.df <- tbl_summary(tab1,
+                         by = user_cat,
+                         statistic = list(
+                           all_continuous() ~ "{mean} ({sd})",
+                           all_categorical() ~ "{n} ({p}%)"
+                         ),
+                         label = list(
+                           demo_age ~ "Age (years)", 
+                           demo_gender ~ "Sex", 
+                           BMI ~ "Body Mass Index (kg/m^2)", 
+                           thc.post ~ "THC, post consumption (mg/dL)", 
+                           postConsumpTimeToTest ~ "Time Delay post Consumption (mins)"
+                         ),
+                         digits = all_continuous() ~ 2, 
+                         missing = "no") %>%
+  modify_header(all_stat_cols() ~ "**{level}**\n(N = {n})") %>%
+  add_overall(last = TRUE, col_label = "**Total**\n(N = {N})") %>%
+  # add_n() %>%
+  modify_spanning_header(c("stat_1", "stat_2", "stat_3") ~ "**Marijuana Use Frequency**") %>%
+  bold_labels()
+table1.df
+
+table1.df %>% as_flex_table() %>% flextable::save_as_docx(path = "../results/tabl1.docx")
 ```
 
 
@@ -1655,20 +1684,30 @@ ggplot(data = plot.sofr, aes(x=frame/30, y = exp(f0)))+
   geom_hline(yintercept = 1, color = "darkred", linetype = 1) +
   ylim(0,10) +
   labs(title = "", 
-       x = "seconds", 
+       x = "Seconds After Start of Light Test", 
        y = "Odds Ratio")+
   theme_bw()
 
-plot.sofr$lci <- exp(plot.sofr$f0 - 2*plot.sofr$f0.se)
-plot.sofr$uci <- exp(plot.sofr$f0 + 2*plot.sofr$f0.se)
+plot.sofr$lci <- exp(plot.sofr$f0 - 1.96*plot.sofr$f0.se)
+plot.sofr$uci <- exp(plot.sofr$f0 + 1.96*plot.sofr$f0.se)
+plot.sofr$OR <- exp(plot.sofr$f0)
+plot.sofr$sec <- plot.sofr$frame/30
+
+## Start and End of first region of sig diff.
+start1 <- min(plot.sofr$sec[plot.sofr$lci > 1 & plot.sofr$uci > 1])
+end1 <- max(plot.sofr$sec[plot.sofr$lci > 1 & plot.sofr$uci > 1])
 
 
+or1 <- max(plot.sofr$OR[plot.sofr$sec > start1 & plot.sofr$sec < end1])
+peaktime1 <- plot.sofr$sec[plot.sofr$OR == or1]
+lci1 <- round(plot.sofr$lci[plot.sofr$OR == or1], 2)
+uci1 <- round(plot.sofr$uci[plot.sofr$OR == or1], 2)
+or1 <- round(or1, 2)
 
-plot.sofr$frame[min(plot.sofr$frame[plot.sofr$lci > 1 & plot.sofr$uci > 1])]/30
-plot.sofr$frame[max(plot.sofr$frame[plot.sofr$lci > 1 & plot.sofr$uci > 1])]/30
 
-plot.sofr$frame[min(plot.sofr$frame[plot.sofr$lci < 1 & plot.sofr$uci < 1])]/30
-plot.sofr$frame[max(plot.sofr$frame[plot.sofr$lci < 1 & plot.sofr$uci < 1])]/30
+## Start and End of Second region of sig diff
+start2 <- min(plot.sofr$frame[plot.sofr$lci < 1 & plot.sofr$uci < 1])
+end2 <- max(plot.sofr$frame[plot.sofr$lci < 1 & plot.sofr$uci < 1])
 
 ```
 
