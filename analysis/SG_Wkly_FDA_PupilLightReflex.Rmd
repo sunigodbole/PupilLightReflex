@@ -133,6 +133,7 @@ library(haven)
 library(Hmisc)
 library(ggpmisc)
 library(viridis)
+lib
 
 knitr::opts_chunk$set(
   warning = FALSE,
@@ -954,6 +955,20 @@ right_0.pt.w <- merge(right_0.pt.w, pt.df[, c("subject_id", "user_cat")],
 rownames(right_0.pt.w) <- right_0.pt.w$subject_id
 
 pt.analytic.df <- pt.df[pt.df$subject_id %in% analytic.N,]
+
+post.right.ids <- unique(ps$subject_id[ps$tp == "post" & ps$eye == "Right"])
+pre.right.ids <- unique(ps$subject_id[ps$tp == "pre2" & ps$eye == "Right"])
+
+post.exclude.ids <- post.right.ids[!(post.right.ids %in% pre.right.ids)]
+```
+
+```{r vis_exclPts_wPostdata}
+for(i in post.exclude.ids){
+  print(ggplot(ps[ps$subject_id == i & ps$tp == "post" & ps$eye == "Right", ], 
+         aes(x = frame, y = percent_change))+
+          geom_line())
+}
+
 ```
 
 Send Merged dataset to Dr. Wrobel (20221128)
@@ -979,7 +994,13 @@ saveRDS(pt.analytic.df, file.path(data_folder, ps_folder,
 No Consumption end time recorded for non-users
 ```{r tab1_analyticN}
 # Demographics Table by User Category
-table1(~demo_age + demo_weight+ demo_height+BMI + demo_gender + thc_chg + postConsumpTimeToTest + Post_PreTime + min_constriction_chg + AUC_chg + duration_chg + slope_chg + avg_end_percent_chg +vas1_high_score + vas_high_score_chg + vas1_score_dc + vas_score_dc_chg|user_cat, 
+label(pt.df$demo_age) <- "Age (years)"
+label(pt.df$demo_gender) <- "Sex"
+label(pt.df$BMI) <- "BMI (kg/m^2)"
+label(pt.df$postConsumpTimeToTest) <- "Time Delay After Marijuana Consumption (mins)"
+label(pt.df$thc.post) <- "Blood THC (post consumption)"
+
+table1(~demo_age + demo_gender + BMI + postConsumpTimeToTest + thc.post|user_cat, 
        data = pt.df[pt.df$subject_id %in% analytic.N, ])
 ```
 
