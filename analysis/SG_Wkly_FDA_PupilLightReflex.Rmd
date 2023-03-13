@@ -1692,23 +1692,96 @@ plot.sofr$lci <- exp(plot.sofr$f0 - 1.96*plot.sofr$f0.se)
 plot.sofr$uci <- exp(plot.sofr$f0 + 1.96*plot.sofr$f0.se)
 plot.sofr$OR <- exp(plot.sofr$f0)
 plot.sofr$sec <- plot.sofr$frame/30
+```
 
-## Start and End of first region of sig diff.
-start1 <- min(plot.sofr$sec[plot.sofr$lci > 1 & plot.sofr$uci > 1])
-end1 <- max(plot.sofr$sec[plot.sofr$lci > 1 & plot.sofr$uci > 1])
+```{r findSigRegions}
+sigRegion <- function(df, crit.val, imp.var){
+  time <- imp.var[1]
+  est <- imp.var[2]
+  lci <- imp.var[3]
+  uci <- imp.var[4]
+  
+  
+  crit.rows <- which((df[, lci] < crit.val & df[, uci] < crit.val) |
+                       (df[, lci] > crit.val & df[, uci] > crit.val))
+  
+  # print(crit.rows)
+  
+  group <- vector(mode = "numeric", length = length(crit.rows))
+  grp.ind <- 1
+  for(i in 1:length(crit.rows)){
+    if(i == 1){
+      group[i] <- grp.ind}
+    else(if(i > 1){
+      if(crit.rows[i] - crit.rows[i-1] == 1){
+        group[i] <- grp.ind
+      }
+      else(if(crit.rows[i] - crit.rows[i-1] != 1){
+        grp.ind <- grp.ind+1
+        group[i] <- grp.ind
+      })
+    })
+    
+  }
+  # print(group)
+  
+  num.grp <- unique(group)
+  ind.df <- data.frame(group = NA, 
+                       start = NA, 
+                       end = NA)
+  for(i in num.grp){
+    ind.df[i,] <- c(i, min(crit.rows[group == i]), max(crit.rows[group == i]))
+  }
+  
+  # print(ind.df)
+  
+  res.df <- data.frame(int.start = NA, 
+                       int.end = NA, 
+                       est.time = NA,
+                       est = NA,
+                       lci = NA,
+                       uci = NA)
+  # print(nrow(ind.df))
+  
+  for(i in 1:nrow(ind.df)){
+    
+    sub.df <- df[(ind.df$start[i]):(ind.df$end[i]), ]
+    
+    # print(sub.df[1, ])
+    
+    if(sub.df[1, lci] > crit.val & sub.df[1, uci] >crit.val){
+      start1 <- round(sub.df[1, time], 2)
+      end1 <- round(sub.df[nrow(sub.df), time], 2)
+      or1 <- max(sub.df[ , est])
+      peaktime1 <- round(sub.df[sub.df[, est] == or1, time], 2)
+      lci1 <- round(sub.df[sub.df[, est] == or1, lci], 2)
+      uci1 <- round(sub.df[sub.df[, est] == or1, uci], 2)
+      or1 <- round(or1, 2)
+      
+      res.df[i, ] <- c(start1, end1, peaktime1, or1, lci1, uci1)
+      # print(res.df)
+      
+    }
+    if(sub.df[1, lci] < crit.val & sub.df[1, uci] < crit.val){
+      start2 <- round(sub.df[1, time], 2)
+      end2 <- round(sub.df[nrow(sub.df), time], 2)
+      or2 <- min(sub.df[, est])
+      peaktime2 <- round(sub.df[sub.df[, est] == or2, time], 2)
+      lci2 <- round(sub.df[sub.df[, est] == or2, lci], 2)
+      uci2 <- round(sub.df[sub.df[, est] == or2, uci], 2)
+      or2 <- round(or2, 2)
+      
+      res.df[i, ] <- c(start2, end2, peaktime2, or2, lci2, uci2)
+      # print(res.df)
+    }
+  }
+  
+  
+  # crit.ind <- by(crit.rows, INDICES = list(group), FUN = function(x) c(min(x), max(x)))
+  return(res.df)
+}
 
-
-or1 <- max(plot.sofr$OR[plot.sofr$sec > start1 & plot.sofr$sec < end1])
-peaktime1 <- plot.sofr$sec[plot.sofr$OR == or1]
-lci1 <- round(plot.sofr$lci[plot.sofr$OR == or1], 2)
-uci1 <- round(plot.sofr$uci[plot.sofr$OR == or1], 2)
-or1 <- round(or1, 2)
-
-
-## Start and End of Second region of sig diff
-start2 <- min(plot.sofr$frame[plot.sofr$lci < 1 & plot.sofr$uci < 1])
-end2 <- max(plot.sofr$frame[plot.sofr$lci < 1 & plot.sofr$uci < 1])
-
+sofr.sigRegions <- sigRegion(plot.sofr, 1, imp.var = c("sec", "OR", "lci", "uci"))
 ```
 
 
@@ -2445,8 +2518,9 @@ post_occ_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f1_hat))+
                 geom_line(aes(x = seconds, y = f1_hat + 2*f1_se), linetype = "longdash")+
                 geom_line(aes(x = seconds, y = f1_hat - 2*f1_se), linetype = "longdash")+
                 geom_line(aes(x = seconds, y = 0), col = "darkred")+
-                labs(title = "Occasional v Non-user", 
-                     y= "")+
+                labs(title = "Occasional vs Non-user", 
+                     y= "", 
+                     x = "")+
                 theme_bw()+
                 scale_x_continuous(expand = c(0, 0))+
                 theme(rect = element_rect(fill = "transparent"))
@@ -2456,8 +2530,9 @@ post_dly_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f2_hat))+
                 geom_line(aes(x = seconds, y = f2_hat + 2*f2_se), linetype = "longdash")+
                 geom_line(aes(x = seconds, y = f2_hat - 2*f2_se), linetype = "longdash")+
                 geom_line(aes(x = seconds, y = 0), col = "darkred")+
-                labs(title = "Daily v Non-user", 
-                     y = "")+
+                labs(title = "Daily vs Non-user", 
+                     y = "", 
+                     x = "")+
                 theme_bw()+
                 scale_x_continuous(expand = c(0, 0))+
                 theme(rect = element_rect(fill = "transparent"))
@@ -2466,12 +2541,10 @@ ylab <- textGrob(label = "Difference in Percent Change", rot = 90,
                  gp = gpar(fontsize = 12))
 posval <- textGrob(label = sapply(strwrap("Less Constriction in User", width = 15, simplify = F),
                                   paste, collapse = "\n"), rot = 0, 
-                 gp = gpar(fontsize = 6),
-                 just = "bottom")
+                 gp = gpar(fontsize = 8))
 negval <- textGrob(label = sapply(strwrap("More Constriction in User", width = 15, simplify = F),
                                   paste, collapse = "\n"), rot = 0, 
-                 gp = gpar(fontsize = 6),
-                 just = "top")
+                 gp = gpar(fontsize = 8))
 
 post_occ_coef <- grid.arrange(ylab, posval, negval, post_occ_plt, 
                               ncol = 2, nrow = 2, 
@@ -2481,6 +2554,15 @@ post_dly_coef <- grid.arrange(ylab, posval, negval, post_dly_plt,
                               ncol = 2, nrow = 2, 
                               layout_matrix = rbind(c(1, 2, rep(4, 15)), c(1, 3, rep(4, 15))))
 
+pred_coef_df$f1_lci <- pred_coef_df$f1_hat - 2*pred_coef_df$f1_se
+pred_coef_df$f1_uci <- pred_coef_df$f1_hat + 2*pred_coef_df$f1_se
+
+pred_coef_df$f2_lci <- pred_coef_df$f2_hat - 2*pred_coef_df$f2_se
+pred_coef_df$f2_uci <- pred_coef_df$f2_hat + 2*pred_coef_df$f2_se
+
+
+occ_non.sigRegion <- sigRegion(pred_coef_df, crit.val = 0, imp.var = c("seconds", "f1_hat", "f1_lci", "f1_uci"))
+dly_non.sigRegion <- sigRegion(pred_coef_df, crit.val = 0, imp.var = c("seconds", "f2_hat", "f2_lci", "f2_uci"))
 ```
 
 Plot difference between daily and occasional user
@@ -2506,7 +2588,8 @@ post_dlyocc_plt <- ggplot(data = f2_f1_diff_df, aes(x=seconds, y = f2f1_diff))+
                    geom_line(aes(x = seconds, y = f2f1_diff - 2*f2f1_se), linetype = "longdash")+
                    geom_line(aes(x = seconds, y = 0), col = "darkred")+
                    labs(title = "Daily vs Occasional User", 
-                        y = "")+
+                        y = "", 
+                        x = "Seconds After Start of Light Test")+
                    theme_bw()+
                    scale_x_continuous(expand = c(0, 0))+
                    theme(rect = element_rect(fill = "transparent"))
@@ -2515,13 +2598,12 @@ ylab <- textGrob(label = "Difference in Percent Change in Pupil Response", rot =
                  gp = gpar(fontsize = 12))
 posval_do <- textGrob(label = sapply(strwrap("Less Constriction in Daily User", width = 15, 
                                           simplify = F),
-                                  paste, collapse = "\n"), rot = 0, just = "bottom", 
-                 gp = gpar(fontsize = 6))
+                                  paste, collapse = "\n"), rot = 0, 
+                 gp = gpar(fontsize = 8))
 negval_do <- textGrob(label = sapply(strwrap("More Constriction in Daily User", width = 15, 
                                           simplify = F),
                                   paste, collapse = "\n"), rot = 0, 
-                 gp = gpar(fontsize = 6),
-                 just = "top")
+                 gp = gpar(fontsize = 8))
 
 post_dlyocc_coef <- grid.arrange(ylab, posval_do, negval_do, post_dlyocc_plt, 
                                  ncol = 2, nrow = 2, 
@@ -2532,17 +2614,43 @@ post_dlyocc_coef
 ```
 
 Panel Graphic of Differences
-```{r post_diff_plots}
-blank <- grid.rect(gp=gpar(col="white"))
+```{r post_diff_plots, fig.height=7}
+# blank <- grid.rect(gp=gpar(col="white"))
+# posval2 <- posval
+# negval2 <- negval
 
+g1 <- grid.arrange(posval, negval, post_occ_plt, 
+                                 ncol = 2, nrow = 2, 
+                                 layout_matrix = rbind(c(1, rep(3, 9)), 
+                                                       c(2, rep(3, 9))))
 
-grid.arrange(ylab, posval, negval, posval_do, negval_do, 
-             post_occ_plt, post_dly_plt, post_dlyocc_plt, blank, 
-                                 ncol = 4, nrow = 4, 
-                                 layout_matrix = rbind(c(1, 2, rep(6, 8), rep(7, 8)),
-                                                       c(1, 3, rep(6, 8), rep(7, 8)),
-                                                       c(1, 4, rep(8, 8), rep(9, 8)),
-                                                       c(1, 5, rep(8, 8), rep(9, 8))))
+g2 <- grid.arrange(posval, negval, post_dly_plt, 
+                                 ncol = 2, nrow = 2, 
+                                 layout_matrix = rbind(c(1, rep(3, 9)), 
+                                                       c(2, rep(3, 9))))
+
+g3 <- grid.arrange(posval_do, negval_do, post_dlyocc_plt, 
+                                 ncol = 2, nrow = 2, 
+                                 layout_matrix = rbind(c(1, rep(3, 9)), 
+                                                       c(2, rep(3, 9))))
+
+grid.arrange(ylab, g1, g2, g3,
+             ncol = 2, nrow = 18,
+             layout_matrix = rbind(c(1, rep(2, 15)),
+                                   c(1, rep(2, 15)),
+                                   c(1, rep(2, 15)),
+                                   c(1, rep(2, 15)),
+                                   c(1, rep(2, 15)),
+                                   c(1, rep(3, 15)),
+                                   c(1, rep(3, 15)),
+                                   c(1, rep(3, 15)),
+                                   c(1, rep(3, 15)),
+                                   c(1, rep(3, 15)),
+                                   c(1, rep(4, 15)), 
+                                   c(1, rep(4, 15)),
+                                   c(1, rep(4, 15)), 
+                                   c(1, rep(4, 15)),
+                                   c(1, rep(4, 15))))
 
 ```
 ### Check for differences between smoker vs non-smoker
