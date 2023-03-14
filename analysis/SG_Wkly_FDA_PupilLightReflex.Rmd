@@ -1795,7 +1795,7 @@ sofr.sigRegions <- sigRegion(plot.sofr, 1, imp.var = c("sec", "OR", "lci", "uci"
 plot.roc(pt.scalar.roc, main = "", 
          col = roc.col[2])
 plot.roc(pt.sofr.roc, main = "", add = T, col = roc.col[5])
-legend(0.55, 0.2, legend = c(paste0("Summary Features AUC: ",round(post.auc.scalar, 3)),
+legend(0.7, 0.1, legend = c(paste0("Summary Features AUC: ",round(post.auc.scalar, 3)),
                              paste0("Full Trajectory AUC: ", round(pt.sofr.roc.auc, 3))),
        col = roc.col[c(2,5)], 
        lty = rep(1, 2), cex = 0.8, bty="n")
@@ -4125,7 +4125,7 @@ ggplot(data= pt.analytic.df[pt.analytic.df$user_cat != "non-user", ],
        aes(x = postConsumpTimeToTest))+
   geom_histogram(binwidth = 1, fill = "darkgrey")+
   geom_vline(xintercept = mean(pt.analytic.df$postConsumpTimeToTest[pt.analytic.df$user != "non-user"], na.rm = T), 
-             col = "darkred")+
+             col = "darkred", linetype = "longdash")+
   scale_y_continuous(expand = c(0,0))+
   scale_x_continuous(breaks = round(seq(53, 84, length.out = 5)),
                      labels = as.character(round(seq(53, 84, length.out = 5))))+
