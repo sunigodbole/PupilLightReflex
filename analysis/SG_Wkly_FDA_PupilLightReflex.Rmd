@@ -1031,6 +1031,8 @@ table1.df <- tbl_summary(tab1,
 table1.df
 
 table1.df %>% as_flex_table() %>% flextable::save_as_docx(path = "../results/tabl1.docx")
+
+pt.df$postConsumpTimeToTest[pt.df$user_cat == "non-user"] <- NA
 ```
 
 
@@ -1786,14 +1788,14 @@ sofr.sigRegions <- sigRegion(plot.sofr, 1, imp.var = c("sec", "OR", "lci", "uci"
 
 
 
-```{r auc_plot_post}
+```{r auc_plot_post, fig.width=5, fig.height=5}
 # "Prediction of Cannabis Use with Single Summary Features and Full Trajectory Model after Cannabis Consumption"
 # jpeg(file.path(res_folder, "AUC_4PC_ScalarFeatures.jpg"), 
 #      height = 6, width = 8, res = 300, units = "in")
 plot.roc(pt.scalar.roc, main = "", 
          col = roc.col[2])
 plot.roc(pt.sofr.roc, main = "", add = T, col = roc.col[5])
-legend(0.5, 0.35, legend = c(paste0("Summary Features AUC: ",round(post.auc.scalar, 3)),
+legend(0.55, 0.2, legend = c(paste0("Summary Features AUC: ",round(post.auc.scalar, 3)),
                              paste0("Full Trajectory AUC: ", round(pt.sofr.roc.auc, 3))),
        col = roc.col[c(2,5)], 
        lty = rep(1, 2), cex = 0.8, bty="n")
@@ -2808,15 +2810,20 @@ post_smk_coef <- grid.arrange(ylab, posval, negval, post_smk_plt,
 
 Manuscript plot of mean trajectories for smokers and all user categories
 ```{r plot_smk_user_mean}
-post_allProfile <- ggplot(data = pred_df_user, aes(x = seconds, y = mean, group = user, col = user))+
+user_col <- viridis(15)
+
+post_allProfile <- ggplot(data = pred_df_user, aes(x = seconds, y = mean, group = user, col = as.factor(user)))+
                    geom_line()+
-                   geom_line(data = pred_df_smk[pred_df_smk$user == "smoker", ], 
-                             aes(x = seconds, y = mean), 
-                             linetype = "longdash")+
+                   geom_line(data = pred_df_smk[pred_df_smk$user == "smoker", ],
+                             aes(x = seconds, y = mean),
+                             linetype = "longdash", col = user_col[12])+
+                   scale_color_manual(values = c(user_col[c(2, 13, 11)]), 
+                                      breaks = c("non-user", "occasional", "daily"))+
                    labs(y = "Percent Change in Pupil Response", 
                         x = "Seconds are Start of Light Test", 
-                        colour = "Cannabis Use")+
-                   theme_bw()
+                        colour = "")+
+                   theme_bw()+
+                   theme(legend.position = c(0.9,0.2))
 
 post_allProfile
 ```
@@ -4110,17 +4117,20 @@ ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = p
 ggplot(data = pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], aes(x = postConsumpTimeToTest, y = wpd.PC3, col = user_cat))+
   geom_point()+
   theme_bw()
+```
 
+
+```{r distPCTT}
 ggplot(data= pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], 
        aes(x = postConsumpTimeToTest))+
-  geom_histogram(binwidth = 1)+
-  geom_vline(xintercept = mean(pt.analytic.df$postConsumpTimeToTest, na.rm = T), 
+  geom_histogram(binwidth = 1, fill = "darkgrey")+
+  geom_vline(xintercept = mean(pt.analytic.df$postConsumpTimeToTest[pt.analytic.df$user != "non-user"], na.rm = T), 
              col = "darkred")+
   scale_y_continuous(expand = c(0,0))+
-  scale_x_continuous(breaks = round(seq(53, 84, length.out = 5), 1),
-                     labels = as.character(round(seq(53, 84, length.out = 5), 1)))+
-  labs(x= "Post Consumption Time to Test", 
-       caption = "Red line at mean value")+
+  scale_x_continuous(breaks = round(seq(53, 84, length.out = 5)),
+                     labels = as.character(round(seq(53, 84, length.out = 5))))+
+  labs(x= "Time Delay from Consumption to Test (mins)", 
+       y = "")+
   theme_bw()
 ```
 
@@ -4135,16 +4145,8 @@ Y_{i}(t) &= f_0(t) + f_1(t)*I(user = occasional) + f_2(t)*I(user = daily) +f_3(t
 \end{aligned}
 $$
 
-Histogram of post consumption time to test
-```{r Hist_PCTT}
-ggplot(pt.analytic.df, aes(x = postConsumpTimeToTest))+
-  geom_histogram()
-
-```
-
-
 ```{r post_gam_intPCTT}
-pt.analytic.df$postConsumpTimeToTest_c <- pt.analytic.df$postConsumpTimeToTest- round(mean(pt.analytic.df$postConsumpTimeToTest, na.rm = T), 3)
+pt.analytic.df$postConsumpTimeToTest_c <- pt.analytic.df$postConsumpTimeToTest- round(mean(pt.analytic.df$postConsumpTimeToTest[pt.analytic.df$user_cat != "non-user"], na.rm = T), 3)
 
 summary(pt.analytic.df$postConsumpTimeToTest_c)
 by(data = pt.analytic.df$postConsumpTimeToTest_c, INDICES = pt.analytic.df$user_cat, FUN = summary)
@@ -4614,10 +4616,10 @@ lpmat_smoke75 <- predict(post_intPCTT_smoke.gam.fri, newdata=df_pred_smoke75, se
 
 
 pred_df <- data.frame(seconds = rep(seq(0, 400), 4)/30,
-                      user = c(rep("non-smoker", 401), 
-                               rep("smoker (65 min)", 401), 
-                               rep("smoker (60 min)", 401), 
-                               rep("smoker (70 min)", 401)
+                      user = c(rep("Non-Smoker", 401), 
+                               rep("Smoker (65 min)", 401), 
+                               rep("Smoker (60 min)", 401), 
+                               rep("Smoker (70 min)", 401)
                                ), 
                       mean = c(lpmat_non %*% post_intPCTT_smoke_gam.coef, 
                                lpmat_smoke50 %*% post_intPCTT_smoke_gam.coef, 
@@ -4634,8 +4636,13 @@ pred_df <- data.frame(seconds = rep(seq(0, 400), 4)/30,
 post_smokerProfile <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
                     geom_line()+
                     labs(y = "Percent Change in Pupil Response", 
-                         x = "Seconds from Start of Light Test")+
-                    theme_bw()
+                         x = "Seconds from Start of Light Test", 
+                         col = "")+
+                    scale_color_manual(values = c(user_col[c(2, 9, 11, 13, 15)]), 
+                                      breaks = c("Non-Smoker", "Smoker (65 min)",
+                                                 "Smoker (60 min)", "Smoker (70 min)"))+
+                    theme_bw()+
+                    theme(legend.position = c(0.9,0.2))
 
 post_smokerProfile
 
@@ -4647,7 +4654,8 @@ post_smokerProfile.se <- ggplot(data = pred_df, aes(x = seconds, y = mean, group
                               linetype = "longdash")+
                     geom_line(aes(x=seconds, y = mean - 2*se, group = user, col = user),
                               linetype = "longdash")+
-                    labs(y = "")+
+                    labs(y = "", 
+                         col = "")+
                     theme_bw()
 post_smokerProfile.se
 
@@ -4734,6 +4742,8 @@ post_intPCTT_smoke.gam.fri <- mgcv::bam(percent_change ~
 
 summary(post_intPCTT_smoke.gam.fri)
 ```
+
+
 ```{r plotNL_Effects}
 post_intPCTT_smoke_gam.coef <- post_intPCTT_smoke.gam.fri$coefficients
 post_intPCTT_smoke_gam.cov <- vcov.gam(post_intPCTT_smoke.gam.fri)
