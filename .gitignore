@@ -4,6 +4,9 @@
 ## History
 .Rhistory
 
+## EndNote libraries
+.enl
+
 ## data directories and files
 data
 analysis/*_cache/

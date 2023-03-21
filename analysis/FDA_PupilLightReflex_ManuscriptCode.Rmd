@@ -30,6 +30,9 @@ library(Hmisc)
 library(ggpmisc)
 library(viridis)
 library(gtsummary)
+library(cowplot)
+library(ggpubr)
+library(plotROC)
 
 knitr::opts_chunk$set(
   warning = FALSE,
@@ -210,22 +213,12 @@ Plot of PRE/POST for Right Eye
 ```{r rightEye_plots}
 right.df <- ps[ps$eye == "Right", ]
 
-# ggplot(right.df, aes(x=frame/30, y = pupil_size, group = subject_id))+
-#   geom_line(show.legend = FALSE, alpha = 0.5)+
-#   facet_grid(rows = vars(user_cat), cols = vars(tp))+
-#   labs(title ="Pupil Size by Pre/Post and THC use category", 
-#        x = "seconds")+
-#   theme_bw()
-
-# jpeg(file.path(res_folder, "PrePost_Right_PercentChange.jpg"), 
-#      height = 6, width = 8, res = 300, units = "in")
 ggplot(right.df, aes(x=frame/30, y = percent_change, group = subject_id))+
   geom_line(show.legend = FALSE, alpha = 0.5)+
   facet_grid(rows = vars(user_cat), cols = vars(tp))+
   labs(title = "Percent Change by Pre/Post and THC use category", 
        x = "seconds")+
   theme_bw()
-# dev.off()
 ```
 
 ## Create Analytic Sample
@@ -426,6 +419,45 @@ for(i in post.exclude.ids){
 
 ```
 
+#Figure Typical Pupil Light Response
+```{r vis_typicalTraj}
+# for(i in non_user.id){
+#   print(ggplot(right_0.post[right_0.post$subject_id == i, ], 
+#          aes(x = frame, y = percent_change))+
+#         labs(x = i)+
+#         geom_line())
+# }
+
+typical.df <- right_0.post[right_0.post$subject_id == "001-032", ]
+typical.df$seconds <- typical.df$frame/30
+
+min.constrict.x <- typical.df$seconds[typical.df$percent_change == min(typical.df$percent_change, na.rm = T)][1]
+min.constrict.y <- min(typical.df$percent_change, na.rm = T)
+
+ggplot(typical.df, aes(x = seconds, y = percent_change))+
+  geom_line()+
+  labs(y = "Percent change in pupil response",
+       x = "Seconds from start of light test")+
+  scale_x_continuous(expand = c(0,0), limits = c(0, 10))+
+  annotate("rect", xmin = min.constrict.x, xmax = 10,
+           ymin = min.constrict.y-2, ymax = 1,
+           alpha = 0.5, fill = "lightblue")+
+  geom_point(x = min.constrict.x, 
+             y = min.constrict.y, 
+             colour = "darkblue", 
+             size = 2)+
+  geom_vline(xintercept = min.constrict.x, color = "darkblue", linetype ="dotted")+
+  annotate("text", x =min.constrict.x-0.25, 
+           y = min.constrict.y-0.5,
+           label = "Point of \nminimal \nconstriction", 
+           hjust= 1)+
+
+  annotate("text", x = 6.25, y = 0, 
+           label = "Rebound dilation")
+```
+
+
+
 # Table 1
 
 No Consumption end time recorded for non-users
@@ -502,17 +534,6 @@ auc_inference <- data.frame(subject_id = pt.scores$subject_id,
                             smoker = pt.scores$smoker,
                             stringsAsFactors = F)
 
-m1 <- glm(smoker ~ PC1 + PC2 + PC3 +PC4, family = "binomial", data = pt.scores)
-# summary(m1)
-pt.scores$pred <- predict(m1, pt.scores)
-pt.scores.roc <- roc(response = pt.scores$smoker, predictor = pt.scores$pred)
-# pt.scores.roc
-post.auc.pc4 <- pt.scores.roc$auc
-
-auc_inference$post_PC_aucScores <- pt.scores.roc$original.predictor
-
-
-plot.roc(pt.scores.roc, main = "Prediction of Smoker by PCs and Scalar Features in Post and WPD")
 
 m1.scalar <- glm(smoker ~ min_constriction.post + AUC.post + slope.post, family = "binomial", data = pt.scores)
 # summary(m1.scalar)
@@ -524,61 +545,9 @@ post.auc.scalar <- pt.scalar.roc$auc
 
 auc_inference$post_SF_aucScores <- pt.scalar.roc$original.predictor
 
-auc.df <- data.frame("Label" = c("Post AUC PCs", "Post AUC Scalar Feat"), 
-                     "AUC" = c(post.auc.pc4, post.auc.scalar), 
-                     stringsAsFactors = F)
 
-### WPD rocs
-m5 <- glm(smoker ~ PC1 + PC2 + PC3 +PC4, family = "binomial", data = pt.wi.scores)
-# summary(m5)
 
-pt.wi.scores$pred_sameNPC <- predict(m5, pt.wi.scores)
-pt.wi.scores.roc2 <- roc(response = pt.wi.scores$smoker, 
-                     predictor = pt.wi.scores$pred_sameNPC)
-# pt.wi.scores.roc2
-wi.auc.pcs <- pt.wi.scores.roc2$auc
-auc.df <- rbind(auc.df, c("W/I Diff AUC PCS", wi.auc.pcs))
-
-wpd_auc <- pt.wi.scores[, c("subject_id", "smoker")]
-wpd_auc$wpd_PC_aucScores <- pt.wi.scores.roc2$original.predictor
-
-m5.scalar <- glm(smoker ~ min_constriction_chg + AUC_chg + slope_chg, family = "binomial", data = pt.wi.scores)
-# summary(m5.scalar)
-
-pt.wi.scores$pred_wi_scalar <- predict(m5.scalar, pt.wi.scores)
-pt.wi.scalar.roc2 <- roc(response = pt.wi.scores$smoker, 
-                     predictor = pt.wi.scores$pred_wi_scalar)
-wpd_auc$wpd_SF_aucScores <- pt.wi.scalar.roc2$original.predictor
-# pt.wi.scalar.roc2
-wi.auc.scalars <- pt.wi.scalar.roc2$auc
-auc.df <- rbind(auc.df, c("W/I Diff AUC Scalar Feat", wi.auc.scalars))
-auc.df$AUC <- as.numeric(auc.df$AUC)
-```
-
-```{r auc_plot_all}
-roc.col <- viridis(5)
-# jpeg(file.path(res_folder, "AUC_4PC_ScalarFeatures.jpg"), 
-#      height = 6, width = 8, res = 300, units = "in")
-plot.roc(pt.scores.roc, main = "Prediction of Smoker by PCs and Scalar Features in Post and WPD", 
-         col = roc.col[1])
-plot.roc(pt.scalar.roc, main = "", add = T, col = roc.col[2])
-plot.roc(pt.wi.scores.roc2, 
-         col = roc.col[3], 
-         add = T)
-
-plot.roc(pt.wi.scalar.roc2, 
-         col = roc.col[4],
-         add = T)
-legend(0.5, 0.35, legend = c(paste0("post PCs AUC: ",round(post.auc.pc4, 3)),
-                                 paste0("post Scalar Features AUC: ",round(post.auc.scalar, 3)), 
-                                 paste0("WPD PCs AUC: ", round(wi.auc.pcs, 3)),
-                                 paste0("WPD Scalar Features AUC: ", round(wi.auc.scalars, 3))),
-       col = roc.col[1:4], 
-       lty = rep(1, 4), cex = 0.8, bty="n")
-# dev.off()
-
-auc_inference <- merge(auc_inference, wpd_auc, 
-                       by = c("subject_id", "smoker"))
+# plot.roc(pt.scalar.roc, main = "Prediction of Smoker by Scalar Features in Post")
 ```
 
 ## SoFR for prediction of smoking
@@ -617,7 +586,10 @@ summary(smk_fglm_ps2)
 pt.sofr.roc <- roc(smk_fglm_ps2$model$smoker, smk_fglm_ps2$fitted.values)
 pt.sofr.roc.auc <- auc(pt.sofr.roc)
 
-auc.df <- rbind(auc.df, c("Post SoFR AUC", pt.sofr.roc.auc))
+auc.df <- data.frame("Label" = c("Post AUC Scalar Feat", "Post SoFR AUC"), 
+                     "AUC" = c(post.auc.scalar, pt.sofr.roc.auc), 
+                     stringsAsFactors = F)
+
 
 sofr_auc <- data.frame("subject_id" = smk.df$subject_id, 
                        "smoker" = smk.df$smoker, 
@@ -629,24 +601,13 @@ auc_inference <- merge(auc_inference, sofr_auc,
 
 ### Plot of SoFR with fPCA imputed data for missing values
 
-```{r sofr_plot}
+```{r sofr_plot_setup}
 df_sofr <- data.frame("smat" = seq(0, 1, length.out = ncol(smk.df$smat)),
                       "zlmat" = 1)
 sofr_pred <- predict(smk_fglm_ps2, newdata = df_sofr, se.fit = TRUE, type = "iterms")
 plot.sofr <- data.frame("frame" = 0:(ncol(smk.df$smat) - 1),
                             "f0" = sofr_pred$fit[, 1],
                             'f0.se' = sofr_pred$se.fit[, 1])
-
-ggplot(data = plot.sofr, aes(x=frame/30, y = exp(f0)))+
-  geom_line()+
-  geom_line(aes(x=frame/30, y = exp(f0-2*f0.se)), linetype = 'longdash')+
-  geom_line(aes(x=frame/30, y = exp(f0+2*f0.se)), linetype = 'longdash')+
-  geom_hline(yintercept = 1, color = "darkred", linetype = 1) +
-  ylim(0,10) +
-  labs(title = "", 
-       x = "Seconds After Start of Light Test", 
-       y = "Odds Ratio")+
-  theme_bw()
 
 plot.sofr$lci <- exp(plot.sofr$f0 - 1.96*plot.sofr$f0.se)
 plot.sofr$uci <- exp(plot.sofr$f0 + 1.96*plot.sofr$f0.se)
@@ -747,20 +708,73 @@ sigRegion <- function(df, crit.val, imp.var){
 sofr.sigRegions <- sigRegion(plot.sofr, 1, imp.var = c("sec", "OR", "lci", "uci"))
 ```
 
+### Plot SoFR Results
+```{r sofr_plot}
+sofr_plot <- ggplot(data = plot.sofr, aes(x=frame/30, y = exp(f0)))+
+  geom_line()+
+  geom_line(aes(x=frame/30, y = exp(f0-1.96*f0.se)), linetype = 'longdash')+
+  geom_line(aes(x=frame/30, y = exp(f0+1.96*f0.se)), linetype = 'longdash')+
+  geom_segment(data=sofr.sigRegions, aes(x = int.start, y=1, xend= int.end, yend = 1), 
+               color = "darkred", linetype = "dotted", linewidth =1.2)+
+  # geom_hline(yintercept = 1, color = "darkred", linetype = 1) +
+  scale_x_continuous(expand = c(0, 0), limits = c(0,10))+
+  ylim(0,10) +
+  labs(title = "", 
+       x = "Seconds after start of light test", 
+       y = "Odds ratio between smokers and non-smokers")+
+  theme_bw()
+```
+
+
 ### AUC Plot Comparing feature models and full trajectory models
-```{r auc_plot_post, fig.width=5, fig.height=5}
+```{r auc_plot_post, fig.width=5, fig.height=5, warning=FALSE}
 # "Prediction of Cannabis Use with Single Summary Features and Full Trajectory Model after Cannabis Consumption"
 # jpeg(file.path(res_folder, "AUC_4PC_ScalarFeatures.jpg"), 
 #      height = 6, width = 8, res = 300, units = "in")
-plot.roc(pt.scalar.roc, main = "", 
-         col = roc.col[2])
-plot.roc(pt.sofr.roc, main = "", add = T, col = roc.col[5])
-legend(0.7, 0.1, legend = c(paste0("Summary Features AUC: ",round(post.auc.scalar, 3)),
-                             paste0("Full Trajectory AUC: ", round(pt.sofr.roc.auc, 3))),
-       col = roc.col[c(2,5)], 
-       lty = rep(1, 2), cex = 0.8, bty="n")
-# dev.off()
+roc.col <- viridis(5)
+
+# plot.roc(pt.scalar.roc, main = "", 
+#          col = roc.col[2])
+# plot.roc(pt.sofr.roc, main = "", add = T, col = roc.col[5])
+# legend(0.7, 0.1, legend = c(paste0("Summary Features AUC: ",round(post.auc.scalar, 3)),
+#                              paste0("Full Trajectory AUC: ", round(pt.sofr.roc.auc, 3))),
+#        col = roc.col[c(2,5)], 
+#        lty = rep(1, 2), cex = 0.8, bty="n")
+
+  
+auc_inference.l <- reshape(auc_inference, 
+                           varying = c("post_SF_aucScores", "post_sofr_scores"), 
+                           v.names = "prediction", 
+                           timevar = "model", 
+                           times = c("post_SF_aucScores", "post_sofr_scores"), 
+                           direction = "long")
+auc_inference.l$modelName <- ifelse(auc_inference.l$model == "post_SF_aucScores", 
+                                    paste0("Summary Features AUC: ",round(post.auc.scalar, 3)), 
+                                    paste0("Full Trajectory AUC: ", round(pt.sofr.roc.auc, 3)))
+
+
+plot.roc <- ggplot(data = auc_inference.l, aes(d = smoker, m = prediction, color = modelName))+
+            geom_roc(n.cuts=0)+
+            labs(x = "1-Specificity", 
+                 y = "Sensitivity", 
+                 color = "")+
+            scale_color_manual(values = roc.col[c(5,2)]) +
+            theme_bw()+
+            theme(legend.position = c(0.6,0.2))
 ```
+
+```{r roc_sofr_plots, fig.height= 4, fig.width=8, warning=FALSE}
+
+final.roc <- grid.arrange(plot.roc, sofr_plot, 
+                          layout_matrix = cbind(1,2))
+
+labeled.roc.plot <- as_ggplot(final.roc) +
+                    draw_plot_label(label = c("A", "B"), size = 15, 
+                                    x = c(0, 0.5), y = c(1, 1))
+
+labeled.roc.plot
+```
+
 
 ## Compare AUC across models
 ```{r compare_auc}
@@ -818,19 +832,6 @@ w01 <- function(nN, v01_r, auc_r, v01_s, auc_s){
   return(res)
 }
 
-# w10_postPC_postSF <- w10(nP = sum(auc_inference$smoker == 1), 
-#                          v10_r = V_postPC_10,
-#                          auc_r = auc.df$AUC[auc.df$Label == "Post AUC PCs"], 
-#                          v10_s = V_postSF_10,
-#                          auc_s = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"])
-# 
-# w01_postPC_postSF <- w01(nN = sum(auc_inference$smoker == 0), 
-#                          v01_r = V_postPC_01,
-#                          auc_r = auc.df$AUC[auc.df$Label == "Post AUC PCs"], 
-#                          v01_s = V_postSF_01,
-#                          auc_s = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"])
-                         
-
 w_rs <- function(nP, nN, srpi_r, srnj_r, srpi_s, srnj_s, auc_r, auc_s){
   v10_r <-  Vr_10(nN, srpi_r, srnj_r)
   v01_r <-  Vr_01(pN=nP, srpi_r, srnj_r)
@@ -846,15 +847,6 @@ w_rs <- function(nP, nN, srpi_r, srnj_r, srpi_s, srnj_s, auc_r, auc_s){
   return(res)
 }
 
-w_postPC_postPC <- w_rs(nP = sum(auc_inference$smoker == 1),
-                        nN = sum(auc_inference$smoker == 0), 
-                        srpi_r = auc_inference$post_PC_aucScores[auc_inference$smoker == 1],
-                        srnj_r = auc_inference$post_PC_aucScores[auc_inference$smoker == 0],
-                        srpi_s = auc_inference$post_PC_aucScores[auc_inference$smoker == 1],
-                        srnj_s = auc_inference$post_PC_aucScores[auc_inference$smoker == 0],
-                        auc_r = auc.df$AUC[auc.df$Label == "Post AUC PCs"],
-                        auc_s = auc.df$AUC[auc.df$Label == "Post AUC PCs"])
-
 w_postSF_postSF <- w_rs(nP = sum(auc_inference$smoker == 1),
                         nN = sum(auc_inference$smoker == 0), 
                         srpi_r = auc_inference$post_SF_aucScores[auc_inference$smoker == 1],
@@ -863,78 +855,6 @@ w_postSF_postSF <- w_rs(nP = sum(auc_inference$smoker == 1),
                         srnj_s = auc_inference$post_SF_aucScores[auc_inference$smoker == 0],
                         auc_r = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"],
                         auc_s = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"])
-
-w_wpdPC_wpdPC <- w_rs(nP = sum(auc_inference$smoker == 1),
-                        nN = sum(auc_inference$smoker == 0), 
-                        srpi_r = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 1],
-                        srnj_r = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 0],
-                        srpi_s = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 1],
-                        srnj_s = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 0],
-                        auc_r = auc.df$AUC[auc.df$Label == "W/I Diff AUC PCS"],
-                        auc_s = auc.df$AUC[auc.df$Label == "W/I Diff AUC PCS"])
-
-w_wpdSF_wpdSF <- w_rs(nP = sum(auc_inference$smoker == 1),
-                        nN = sum(auc_inference$smoker == 0), 
-                        srpi_r = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 1],
-                        srnj_r = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 0],
-                        srpi_s = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 1],
-                        srnj_s = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 0],
-                        auc_r = auc.df$AUC[auc.df$Label == "W/I Diff AUC Scalar Feat"],
-                        auc_s = auc.df$AUC[auc.df$Label == "W/I Diff AUC Scalar Feat"])
-
-w_postPC_postSF <- w_rs(nP = sum(auc_inference$smoker == 1),
-                        nN = sum(auc_inference$smoker == 0), 
-                        srpi_r = auc_inference$post_PC_aucScores[auc_inference$smoker == 1],
-                        srnj_r = auc_inference$post_PC_aucScores[auc_inference$smoker == 0],
-                        srpi_s = auc_inference$post_SF_aucScores[auc_inference$smoker == 1],
-                        srnj_s = auc_inference$post_SF_aucScores[auc_inference$smoker == 0],
-                        auc_r = auc.df$AUC[auc.df$Label == "Post AUC PCs"],
-                        auc_s = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"])
-
-w_postPC_wpdPC <- w_rs(nP = sum(auc_inference$smoker == 1),
-                        nN = sum(auc_inference$smoker == 0), 
-                        srpi_r = auc_inference$post_PC_aucScores[auc_inference$smoker == 1],
-                        srnj_r = auc_inference$post_PC_aucScores[auc_inference$smoker == 0],
-                        srpi_s = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 1],
-                        srnj_s = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 0],
-                        auc_r = auc.df$AUC[auc.df$Label == "Post AUC PCs"],
-                        auc_s = auc.df$AUC[auc.df$Label == "W/I Diff AUC PCS"])
-
-w_postPC_wpdSF <- w_rs(nP = sum(auc_inference$smoker == 1),
-                        nN = sum(auc_inference$smoker == 0), 
-                        srpi_r = auc_inference$post_PC_aucScores[auc_inference$smoker == 1],
-                        srnj_r = auc_inference$post_PC_aucScores[auc_inference$smoker == 0],
-                        srpi_s = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 1],
-                        srnj_s = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 0],
-                        auc_r = auc.df$AUC[auc.df$Label == "Post AUC PCs"],
-                        auc_s = auc.df$AUC[auc.df$Label == "W/I Diff AUC Scalar Feat"])
-
-w_postSF_wpdPC <- w_rs(nP = sum(auc_inference$smoker == 1),
-                        nN = sum(auc_inference$smoker == 0), 
-                        srpi_r = auc_inference$post_SF_aucScores[auc_inference$smoker == 1],
-                        srnj_r = auc_inference$post_SF_aucScores[auc_inference$smoker == 0],
-                        srpi_s = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 1],
-                        srnj_s = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 0],
-                        auc_r = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"],
-                        auc_s = auc.df$AUC[auc.df$Label == "W/I Diff AUC PCS"])
-
-w_postSF_wpdSF <- w_rs(nP = sum(auc_inference$smoker == 1),
-                        nN = sum(auc_inference$smoker == 0), 
-                        srpi_r = auc_inference$post_SF_aucScores[auc_inference$smoker == 1],
-                        srnj_r = auc_inference$post_SF_aucScores[auc_inference$smoker == 0],
-                        srpi_s = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 1],
-                        srnj_s = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 0],
-                        auc_r = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"],
-                        auc_s = auc.df$AUC[auc.df$Label == "W/I Diff AUC Scalar Feat"])
-
-w_wpdPC_wpdSF <- w_rs(nP = sum(auc_inference$smoker == 1),
-                        nN = sum(auc_inference$smoker == 0), 
-                        srpi_r = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 1],
-                        srnj_r = auc_inference$wpd_PC_aucScores[auc_inference$smoker == 0],
-                        srpi_s = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 1],
-                        srnj_s = auc_inference$wpd_SF_aucScores[auc_inference$smoker == 0],
-                        auc_r = auc.df$AUC[auc.df$Label == "W/I Diff AUC PCS"],
-                        auc_s = auc.df$AUC[auc.df$Label == "W/I Diff AUC Scalar Feat"])
 
 w_postSOFR_postSF <- w_rs(nP = sum(auc_inference$smoker == 1),
                         nN = sum(auc_inference$smoker == 0), 
@@ -955,41 +875,11 @@ w_postSOFR_postSOFR <- w_rs(nP = sum(auc_inference$smoker == 1),
                         auc_r = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"],
                         auc_s = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"]) 
 
-z_postPC_postSF <- (auc.df$AUC[auc.df$Label == "Post AUC PCs"] - auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"])/
-  (sqrt(w_postPC_postPC +  w_postSF_postSF - w_postPC_postSF))
-
-z_postPC_wpdPC <- (auc.df$AUC[auc.df$Label == "Post AUC PCs"] - auc.df$AUC[auc.df$Label == "W/I Diff AUC PCS"])/
-  (sqrt(w_postPC_postPC +  w_wpdPC_wpdPC - w_postPC_wpdPC))
-
-z_postPC_wpdSF <- (auc.df$AUC[auc.df$Label == "Post AUC PCs"] - auc.df$AUC[auc.df$Label == "W/I Diff AUC Scalar Feat"])/
-  (sqrt(w_postPC_postPC +  w_wpdSF_wpdSF - w_postPC_wpdSF))
-
-z_postSF_wpdPC <- (auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"] - auc.df$AUC[auc.df$Label == "W/I Diff AUC PCS"])/
-  (sqrt(w_postSF_postSF +  w_wpdPC_wpdPC - w_postSF_wpdPC))
-
-z_postSF_wpdSF <- (auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"] - auc.df$AUC[auc.df$Label == "W/I Diff AUC Scalar Feat"])/
-  (sqrt(w_postSF_postSF +  w_wpdSF_wpdSF - w_postSF_wpdSF))
-
-z_wpdPC_wpdSF <- (auc.df$AUC[auc.df$Label == "W/I Diff AUC PCS"] - auc.df$AUC[auc.df$Label == "W/I Diff AUC Scalar Feat"])/
-  (sqrt(w_wpdSF_wpdSF +  w_wpdPC_wpdPC - w_wpdPC_wpdSF))
-
 z_postSF_postSOFR <- (auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"] - auc.df$AUC[auc.df$Label == "Post SoFR AUC"])/
   (sqrt(w_postSF_postSF +  w_postSOFR_postSOFR - w_postSOFR_postSF))
 
-auc_compare <- data.frame("Test Desciption" = c("AUC-postPC v AUC-postSF", 
-                                                "AUC-postPC v AUC-wpdPC", 
-                                                "AUC-postPC v AUC-wpdSF", 
-                                                "AUC-postSF v AUC-wpdPC",
-                                                "AUC-postSF v AUC-wpdPC", 
-                                                "AUC-wpdPC v AUC-wpdSF", 
-                                                "AUC-postSF v AUC-postSoFR"), 
-                          "z" = c(round(z_postPC_postSF, 3), 
-                                  round(z_postPC_wpdPC, 3), 
-                                  round(z_postPC_wpdSF, 3), 
-                                  round(z_postSF_wpdPC, 3), 
-                                  round(z_postSF_wpdSF, 3), 
-                                  round(z_wpdPC_wpdSF, 3), 
-                                  round(z_postSF_postSOFR, 3)))
+auc_compare <- data.frame("Test Desciption" = "AUC-postSF v AUC-postSoFR", 
+                          "z" = round(z_postSF_postSOFR, 3))
 
 auc_compare$p <- round((1-pnorm(abs(auc_compare$z)))*2, 3)
 
@@ -1049,15 +939,10 @@ pt.analytic.df <- pt.analytic.df[order(pt.analytic.df$subject_id), ]
 
 
 ```{r post_gam}
-# head(right_0.df)
-
 right_0.gam.df <- merge(right_0.post, pt.analytic.df, 
                         by = c("subject_id", "user_cat"))
 
-# right_0.gam.df <- right_0.gam.df[order(right_0.gam.df$subject_id, right_0.gam.df$frame), ]
 right_0.gam.df$sind <- right_0.gam.df$frame/400
-
-# head(right_0.gam.df)
 
 m.post_gam <- mgcv::gam(percent_change ~ s(sind, k=30, bs="cr") + 
                           s(sind, by=occasional, k=30, bs = "cr") + 
@@ -1069,7 +954,6 @@ post_gam.resid <- cbind(right_0.gam.df[!(is.na(right_0.gam.df$percent_change)),
                                        c("subject_id", "frame")], 
                         m.post_gam$residuals)
 names(post_gam.resid) <- c("subject_id", "frame", "resid")
-# post_gam.resid$frame_char <- str_pad(post_gam.resid$frame, width = 3, side = "left", pad = "0")
 
 resid_mat <- reshape(post_gam.resid[, c("subject_id", "frame", "resid")], 
                      timevar = "frame", 
@@ -1077,9 +961,6 @@ resid_mat <- reshape(post_gam.resid[, c("subject_id", "frame", "resid")],
                      direction = "wide")
 rownames(resid_mat) <- resid_mat$subject_id
 resid_mat$subject_id <- NULL
-# resid_names <- names(resid_mat)
-# resid_names <- sort(resid_names)
-# resid_mat <- resid_mat[, resid_names]
 
 resid_mat <- as.matrix(resid_mat)
 
@@ -1106,6 +987,14 @@ post_gam.fri <- mgcv::bam(percent_change ~
 
 
 summary(post_gam.fri)
+```
+
+```{r getLegend, echo = F}
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
 ```
 
 ### Plotting trajectory of occasional & daily user
@@ -1147,28 +1036,13 @@ pred_df_user <- data.frame(seconds = rep(seq(0, 400), 3)/30,
 
 post_userProfile <- ggplot(data = pred_df_user, aes(x = seconds, y = mean, group = user, col = user))+
                     geom_line()+
-                    labs(y = "Percent Change in Pupil Response", 
-                         x = "Seconds from Start of Light Test", 
+                    labs(y = "Percent change in pupil response", 
+                         x = "Seconds from start of light test", 
                          colour = "Cannabis Use")+
                     theme_bw()
 post_userProfile
 
 legend_userProfile <- g_legend(post_userProfile)
-
-post_userProfile.se <- ggplot(data = pred_df_user, aes(x = seconds, y = mean, group = user, col = user))+
-                    geom_line()+
-                    geom_line(aes(x=seconds, y = mean + 2*se, group = user, col = user),
-                              linetype = "longdash")+
-                    geom_line(aes(x=seconds, y = mean - 2*se, group = user, col = user),
-                              linetype = "longdash")+
-                    labs(y = "")+
-                    theme_bw()
-post_userProfile.se
-
-post_userTraj <- grid.arrange(arrangeGrob(post_userProfile+theme(legend.position = "none"), 
-                                          post_userProfile.se+theme(legend.position = "none"), nrow = 1), 
-                              legend_userProfile, nrow = 1, 
-                              widths = c(30, 6))
 ```
 
 
@@ -1184,10 +1058,22 @@ pred_coef_df <- data.frame(seconds = seq(0, 400)/30,
                            f2_hat = pred_f2$fit[, 3], 
                            f2_se = pred_f2$se.fit[, 3])
 
+pred_coef_df$f1_lci <- pred_coef_df$f1_hat - 2*pred_coef_df$f1_se
+pred_coef_df$f1_uci <- pred_coef_df$f1_hat + 2*pred_coef_df$f1_se
+
+pred_coef_df$f2_lci <- pred_coef_df$f2_hat - 2*pred_coef_df$f2_se
+pred_coef_df$f2_uci <- pred_coef_df$f2_hat + 2*pred_coef_df$f2_se
+
+
+occ_non.sigRegion <- sigRegion(pred_coef_df, crit.val = 0, imp.var = c("seconds", "f1_hat", "f1_lci", "f1_uci"))
+dly_non.sigRegion <- sigRegion(pred_coef_df, crit.val = 0, imp.var = c("seconds", "f2_hat", "f2_lci", "f2_uci"))
+
+
 post_non_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f0_hat))+
                 geom_line()+
                 geom_line(aes(x = seconds, y = f0_hat + 2*f0_se), linetype = "longdash")+
                 geom_line(aes(x = seconds, y = f0_hat - 2*f0_se), linetype = "longdash")+
+                scale_x_continuous(expand = c(0, 0), limits = c(0,10))+
                 labs(title = "Average Percent Change of a Non-user (Post)", ylab = "Percent Change")+
                 theme_bw()
 
@@ -1195,24 +1081,29 @@ post_occ_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f1_hat))+
                 geom_line()+
                 geom_line(aes(x = seconds, y = f1_hat + 2*f1_se), linetype = "longdash")+
                 geom_line(aes(x = seconds, y = f1_hat - 2*f1_se), linetype = "longdash")+
-                geom_line(aes(x = seconds, y = 0), col = "darkred")+
+                # geom_line(aes(x = seconds, y = 0), col = "darkred")+
+                geom_segment(data=occ_non.sigRegion, aes(x = int.start, y=0, xend= int.end, yend = 0),
+                                color = "darkred", linetype = "dotted", linewidth =1.2)+
+                  
                 labs(title = "Occasional vs Non-user", 
                      y= "", 
                      x = "")+
                 theme_bw()+
-                scale_x_continuous(expand = c(0, 0))+
+                scale_x_continuous(expand = c(0, 0), limits = c(0,10))+
                 theme(rect = element_rect(fill = "transparent"))
 
 post_dly_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f2_hat))+
                 geom_line()+
                 geom_line(aes(x = seconds, y = f2_hat + 2*f2_se), linetype = "longdash")+
                 geom_line(aes(x = seconds, y = f2_hat - 2*f2_se), linetype = "longdash")+
-                geom_line(aes(x = seconds, y = 0), col = "darkred")+
+                # geom_line(aes(x = seconds, y = 0), col = "darkred")+
+                geom_segment(data=dly_non.sigRegion, aes(x = int.start, y=0, xend= int.end, yend = 0),
+                                color = "darkred", linetype = "dotted", linewidth =1.2)+
                 labs(title = "Daily vs Non-user", 
                      y = "", 
                      x = "")+
                 theme_bw()+
-                scale_x_continuous(expand = c(0, 0))+
+                scale_x_continuous(expand = c(0, 0), limits = c(0,10))+
                 theme(rect = element_rect(fill = "transparent"))
 
 ylab <- textGrob(label = "Difference in Percent Change", rot = 90, 
@@ -1232,15 +1123,6 @@ post_dly_coef <- grid.arrange(ylab, posval, negval, post_dly_plt,
                               ncol = 2, nrow = 2, 
                               layout_matrix = rbind(c(1, 2, rep(4, 15)), c(1, 3, rep(4, 15))))
 
-pred_coef_df$f1_lci <- pred_coef_df$f1_hat - 2*pred_coef_df$f1_se
-pred_coef_df$f1_uci <- pred_coef_df$f1_hat + 2*pred_coef_df$f1_se
-
-pred_coef_df$f2_lci <- pred_coef_df$f2_hat - 2*pred_coef_df$f2_se
-pred_coef_df$f2_uci <- pred_coef_df$f2_hat + 2*pred_coef_df$f2_se
-
-
-occ_non.sigRegion <- sigRegion(pred_coef_df, crit.val = 0, imp.var = c("seconds", "f1_hat", "f1_lci", "f1_uci"))
-dly_non.sigRegion <- sigRegion(pred_coef_df, crit.val = 0, imp.var = c("seconds", "f2_hat", "f2_lci", "f2_uci"))
 ```
 
 
@@ -1254,23 +1136,16 @@ f2_f1_diff_df <- data.frame(seconds = seq(0, 400)/30,
                             f2f1_diff = f2_f1, 
                             f2f1_se = f2_f1.se)
 
-ggplot(data = f2_f1_diff_df, aes(x=seconds, y = f2f1_diff))+
-  geom_line()+
-  geom_line(aes(x = seconds, y = f2f1_diff + 2*f2f1_se), linetype = "longdash")+
-  geom_line(aes(x = seconds, y = f2f1_diff - 2*f2f1_se), linetype = "longdash")+
-  labs(title = "Difference between Average Daily vs Occasional User", ylab = "f2_hat - f1_hat")+
-  theme_bw()
-
 post_dlyocc_plt <- ggplot(data = f2_f1_diff_df, aes(x=seconds, y = f2f1_diff))+
                    geom_line()+
                    geom_line(aes(x = seconds, y = f2f1_diff + 2*f2f1_se), linetype = "longdash")+
                    geom_line(aes(x = seconds, y = f2f1_diff - 2*f2f1_se), linetype = "longdash")+
-                   geom_line(aes(x = seconds, y = 0), col = "darkred")+
+                   # geom_line(aes(x = seconds, y = 0), col = "darkred")+
                    labs(title = "Daily vs Occasional User", 
                         y = "", 
-                        x = "Seconds After Start of Light Test")+
+                        x = "Seconds from start of light test")+
                    theme_bw()+
-                   scale_x_continuous(expand = c(0, 0))+
+                   scale_x_continuous(expand = c(0, 0), limits = c(0,10))+
                    theme(rect = element_rect(fill = "transparent"))
 
 ylab <- textGrob(label = "Difference in Percent Change in Pupil Response", rot = 90, 
@@ -1295,10 +1170,6 @@ post_dlyocc_coef
 
 Panel Graphic of Differences
 ```{r post_diff_plots, fig.height=7}
-# blank <- grid.rect(gp=gpar(col="white"))
-# posval2 <- posval
-# negval2 <- negval
-
 g1 <- grid.arrange(posval, negval, post_occ_plt, 
                                  ncol = 2, nrow = 2, 
                                  layout_matrix = rbind(c(1, rep(3, 9)), 
@@ -1314,7 +1185,7 @@ g3 <- grid.arrange(posval_do, negval_do, post_dlyocc_plt,
                                  layout_matrix = rbind(c(1, rep(3, 9)), 
                                                        c(2, rep(3, 9))))
 
-grid.arrange(ylab, g1, g2, g3,
+fosr_contrasts <- grid.arrange(ylab, g1, g2, g3,
              ncol = 2, nrow = 18,
              layout_matrix = rbind(c(1, rep(2, 15)),
                                    c(1, rep(2, 15)),
@@ -1332,6 +1203,7 @@ grid.arrange(ylab, g1, g2, g3,
                                    c(1, rep(4, 15)),
                                    c(1, rep(4, 15))))
 
+fosr_contrasts
 ```
 
 ### Check for differences between smoker vs non-smoker
@@ -1430,23 +1302,6 @@ post_smkProfile <- ggplot(data = pred_df_smk, aes(x = seconds, y = mean, group =
 post_smkProfile
 
 legend_smkProfile <- g_legend(post_smkProfile)
-
-post_smkProfile.se <- ggplot(data = pred_df_smk, aes(x = seconds, y = mean, group = user, col = user))+
-                      geom_line()+
-                      geom_line(aes(x=seconds, y = mean + 2*se, group = user, col = user),
-                                linetype = "longdash")+
-                      geom_line(aes(x=seconds, y = mean - 2*se, group = user, col = user),
-                                linetype = "longdash")+
-                      scale_y_continuous(limits = c(min(pred_df_smk$mean - 2*pred_df_smk$se),
-                                                    max(pred_df_smk$mean + 2*pred_df_smk$se)))+
-                      labs(y = "")+
-                      theme_bw()
-post_smkProfile.se
-post_smk <- grid.arrange(arrangeGrob(post_smkProfile+theme(legend.position = "none"), 
-                                     post_smkProfile.se+theme(legend.position = "none"), nrow = 1), 
-                         legend_smkProfile, nrow = 1, 
-                         widths = c(30, 6))
-post_smk
 ```
 
 Manuscript plot of mean trajectories for smokers and all user categories
@@ -1458,16 +1313,33 @@ post_allProfile <- ggplot(data = pred_df_user, aes(x = seconds, y = mean, group 
                    geom_line(data = pred_df_smk[pred_df_smk$user == "smoker", ],
                              aes(x = seconds, y = mean),
                              linetype = "longdash", col = user_col[12])+
+                   xlim(c(0, 10))+
                    scale_color_manual(values = c(user_col[c(2, 13, 11)]), 
                                       breaks = c("non-user", "occasional", "daily"))+
-                   labs(y = "Percent Change in Pupil Response", 
-                        x = "Seconds are Start of Light Test", 
+                   labs(y = "Percent change in pupil response", 
+                        x = "Seconds from start of light test", 
                         colour = "")+
                    theme_bw()+
-                   theme(legend.position = c(0.9,0.2))
+                   theme(legend.position = c(0.9,0.8))
 
 post_allProfile
 ```
+
+### Manuscript Figure
+
+```{r fosr_model_plots, fig.height=8, fig.width=15}
+final.fosr <- grid.arrange(post_allProfile, g1, g2, g3, 
+                          layout_matrix = rbind(c(1,2),
+                                                c(3,4)))
+
+labeled.fosr.plot <- as_ggplot(final.fosr) +
+                    draw_plot_label(label = c("A", "B", "C", "D"), size = 15, 
+                                    x = c(0, 0.5, 0, 0.5), y = c(1, 1, 0.5, 0.5))
+
+labeled.fosr.plot
+
+```
+
 
 ## Effect of Post Consumption time to test (PCTT) on trajectories of pupillary light reflex
 
@@ -1480,7 +1352,7 @@ ggplot(data= pt.analytic.df[pt.analytic.df$user_cat != "non-user", ],
   scale_y_continuous(expand = c(0,0))+
   scale_x_continuous(breaks = round(seq(53, 84, length.out = 5)),
                      labels = as.character(round(seq(53, 84, length.out = 5))))+
-  labs(x= "Time Delay from Consumption to Test (mins)", 
+  labs(x= "Time delay from consumption to test (mins)", 
        y = "")+
   theme_bw()
 ```
@@ -1708,38 +1580,15 @@ pred_df <- data.frame(seconds = rep(seq(0, 400), 4)/30,
 
 post_smokerProfile <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
                     geom_line()+
-                    labs(y = "Percent Change in Pupil Response", 
-                         x = "Seconds from Start of Light Test", 
+                    labs(y = "Percent change in pupil response", 
+                         x = "Seconds from start of light test", 
                          col = "")+
+                    scale_x_continuous(expand = c(0, 0), limits = c(0,10))+
                     scale_color_manual(values = c(user_col[c(2, 9, 11, 13, 15)]), 
                                       breaks = c("Non-Smoker", "Smoker (65 min)",
                                                  "Smoker (60 min)", "Smoker (70 min)"))+
                     theme_bw()+
-                    theme(legend.position = c(0.9,0.2))
+                    theme(legend.position = c(0.8,0.8))
 
 post_smokerProfile
-
-legend_smokerProfile <- g_legend(post_smokerProfile)
-
-post_smokerProfile.se <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
-                    geom_line()+
-                    geom_line(aes(x=seconds, y = mean + 2*se, group = user, col = user),
-                              linetype = "longdash")+
-                    geom_line(aes(x=seconds, y = mean - 2*se, group = user, col = user),
-                              linetype = "longdash")+
-                    labs(y = "", 
-                         col = "")+
-                    theme_bw()
-post_smokerProfile.se
-
-# jpeg(file.path(res_folder, "RightEye_AverageTrajectories_SmokersPostConsumptionTimetoTest.jpg"),
-#      height = 6, width = 23, res = 300, units = "in")
-          
-post_smokerTraj <- grid.arrange(arrangeGrob(post_smokerProfile+theme(legend.position = "none"), 
-                                          post_smokerProfile.se+theme(legend.position = "none"), nrow = 1), 
-                              legend_smokerProfile, nrow = 1, 
-                              widths = c(30, 6))
-
-# dev.off()
-post_smokerTraj
 ```
