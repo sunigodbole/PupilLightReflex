@@ -605,6 +605,7 @@ auc_inference <- merge(auc_inference, sofr_auc,
 df_sofr <- data.frame("smat" = seq(0, 1, length.out = ncol(smk.df$smat)),
                       "zlmat" = 1)
 sofr_pred <- predict(smk_fglm_ps2, newdata = df_sofr, se.fit = TRUE, type = "iterms")
+# sofr_pred2 <- predict(smk_fglm_ps2, newdata = df_sofr, se.fit = TRUE, type = "terms")
 plot.sofr <- data.frame("frame" = 0:(ncol(smk.df$smat) - 1),
                             "f0" = sofr_pred$fit[, 1],
                             'f0.se' = sofr_pred$se.fit[, 1])
@@ -613,6 +614,8 @@ plot.sofr$lci <- exp(plot.sofr$f0 - 1.96*plot.sofr$f0.se)
 plot.sofr$uci <- exp(plot.sofr$f0 + 1.96*plot.sofr$f0.se)
 plot.sofr$OR <- exp(plot.sofr$f0)
 plot.sofr$sec <- plot.sofr$frame/30
+plot.sofr$p <- exp(plot.sofr$f0)/(1+exp(plot.sofr$f0))
+
 ```
 
 ```{r findSigRegions}
@@ -723,6 +726,22 @@ sofr_plot <- ggplot(data = plot.sofr, aes(x=frame/30, y = exp(f0)))+
        x = "Seconds after start of light test", 
        y = "Odds ratio between smokers and non-smokers")+
   theme_bw()
+
+sofr_plot_prob <- ggplot(data = plot.sofr, aes(x=frame/30, y = p))+
+                  geom_line()+
+                  geom_line(aes(x=frame/30, y = exp(f0-1.96*f0.se)/(1+exp(f0-1.96*f0.se))), linetype = 'longdash')+
+                  geom_line(aes(x=frame/30, y = exp(f0+1.96*f0.se)/(1+exp(f0+1.96*f0.se))), linetype = 'longdash')+
+                  geom_segment(data=sofr.sigRegions, aes(x = int.start, y=0.50, xend= int.end, yend = 0.5),
+                               color = "darkred", linetype = "dotted", linewidth =1.2)+
+                # geom_hline(yintercept = 1, color = "darkred", linetype = 1) +
+                  scale_x_continuous(expand = c(0, 0), limits = c(0,10))+
+                  ylim(0,1) +
+                  labs(title = "", 
+                       x = "Seconds after start of light test", 
+                       y = "Probability of being a smoker")+
+                  theme_bw()
+
+sofr_plot_prob
 ```
 
 
