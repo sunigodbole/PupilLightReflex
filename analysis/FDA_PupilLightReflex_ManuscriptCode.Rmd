@@ -451,7 +451,8 @@ ggplot(typical.df, aes(x = seconds, y = percent_change))+
   # geom_text(hjust = 0.001)+
   labs(y = "Percent change in pupil response",
        x = "Seconds from start of light test")+
-  scale_x_continuous(expand = c(0,0), limits = c(0, 10))+
+  scale_x_continuous(expand = c(0,0), limits = c(0, 10), 
+                     breaks = c(0,2,4,6,8,10))+
   annotate("rect", xmin = min.constrict.x, xmax = 10,
            ymin = min.constrict.y-2, ymax = 1,
            alpha = 0.5, fill = "lightblue")+
@@ -746,7 +747,7 @@ sofr_plot <- ggplot(data = plot.sofr, aes(x=frame/30, y = exp(f0)))+
                color = "darkred", linewidth =1.2)+
   # geom_hline(yintercept = 1, color = "darkred", linetype = 1) +
   scale_x_continuous(expand = c(0, 0), limits = c(0,10), 
-                     breaks = c(2,4,6,8,10))+
+                     breaks = c(0,2,4,6,8,10))+
   scale_y_continuous(limits = c(0,8), 
                      breaks = c(0,1,2,3,4,6,8)) +
   labs(title = "", 
@@ -1073,7 +1074,7 @@ lpmat_dly <- predict(post_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "lpm
 
 
 pred_df_user <- data.frame(seconds = rep(seq(0, 400), 3)/30,
-                      user = c(rep("no use", 401), rep("occasional", 401),rep("daily", 401)), 
+                      user = c(rep("no use", 401), rep("occasional use", 401),rep("daily use", 401)), 
                       mean = c(lpmat_non %*% post_gam.coef, 
                                lpmat_occ %*% post_gam.coef, lpmat_dly %*% post_gam.coef), 
                       se = c(sqrt(diag(lpmat_non %*% post_gam.cov %*% t(lpmat_non))), 
@@ -1363,8 +1364,8 @@ post_allProfile <- ggplot(data = pred_df_user, aes(x = seconds, y = mean, group 
                              aes(x = seconds, y = mean),
                              linetype = "longdash", col = user_col[12])+
                    scale_color_manual(values = c(user_col[c(2, 13, 11)]), 
-                                      breaks = c("no use", "occasional", "daily"))+
-                   scale_x_continuous(limits = c(0, 10), 
+                                      breaks = c("no use", "occasional use", "daily use"))+
+                   scale_x_continuous(expand = c(0,0), limits = c(0, 10), 
                                       breaks = c(0,2,4,6, 8, 10))+
                    labs(y = "Percent change in pupil response", 
                         x = "Seconds from start of light test", 
