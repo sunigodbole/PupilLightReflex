@@ -443,7 +443,7 @@ typical.df$minConstrict <- ifelse(typical.df$seconds == min.constrict.x &
                           typical.df$percent_change == min.constrict.y, 
                           "Point of \nminimal \nconstriction", "")
 
-typical.df$minConstrict[typical.df$seconds == 2] <- "Percent \nchange \nat 2 second"
+typical.df$minConstrict[typical.df$seconds == 2] <- "Percent \nchange \nat 2 seconds"
 typical.df$minConstrict[typical.df$seconds == 5] <- "Percent \nchange \nat 5 seconds"
 
 ggplot(typical.df, aes(x = seconds, y = percent_change))+
@@ -511,13 +511,20 @@ table1.df <- tbl_summary(tab1,
   modify_header(all_stat_cols() ~ "**{level}**\n(N = {n})") %>%
   add_overall(last = TRUE, col_label = "**Total**\n(N = {N})") %>%
   # add_n() %>%
-  modify_spanning_header(c("stat_1", "stat_2", "stat_3") ~ "**Marijuana Use Frequency**") %>%
+  modify_spanning_header(c("stat_1", "stat_2", "stat_3") ~ "**Cannabis Use Group**") %>%
   bold_labels()
 table1.df
 
-table1.df %>% as_flex_table() %>% flextable::save_as_docx(path = "../results/tabl1.docx")
+# table1.df %>% as_flex_table() %>% flextable::save_as_docx(path = "../results/tabl1.docx")
+tab1_latex <- table1.df %>% as_gt() %>% gt::as_latex()
 
+# table1.df %>% as_gt() %>% gt::gtsave(filename = "../results/tabl1.png")
 pt.df$postConsumpTimeToTest[pt.df$user_cat == "non-user"] <- NA
+
+```
+
+```{r}
+as.character(tab1_latex)
 ```
 
 
