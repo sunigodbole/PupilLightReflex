@@ -503,23 +503,40 @@ table1.df <- tbl_summary(tab1,
                            demo_age ~ "Age (years)", 
                            demo_gender ~ "Sex", 
                            BMI ~ "Body Mass Index (kg/m^2)", 
-                           thc.post ~ "THC, post consumption (mg/dL)", 
-                           postConsumpTimeToTest ~ "Time Delay post Consumption (mins)"
+                           thc.post ~ "THC, after cannabis consumption (mg/dL)", 
+                           postConsumpTimeToTest ~ "Time Delay after cannabis consumption (mins)"
                          ),
                          digits = all_continuous() ~ 2, 
                          missing = "no") %>%
   modify_header(all_stat_cols() ~ "**{level}**\n(N = {n})") %>%
   add_overall(last = TRUE, col_label = "**Total**\n(N = {N})") %>%
-  # add_n() %>%
+  add_p() %>%
   modify_spanning_header(c("stat_1", "stat_2", "stat_3") ~ "**Cannabis Use Group**") %>%
   bold_labels()
 table1.df
 
-# table1.df %>% as_flex_table() %>% flextable::save_as_docx(path = "../results/tabl1.docx")
+table1.df %>% as_flex_table() %>% flextable::save_as_docx(path = "../results/tabl1.docx")
 tab1_latex <- table1.df %>% as_gt() %>% gt::as_latex()
 
 # table1.df %>% as_gt() %>% gt::gtsave(filename = "../results/tabl1.png")
+
+
+
 pt.df$postConsumpTimeToTest[pt.df$user_cat == "non-user"] <- NA
+
+
+# boxplot(demo_age ~ user_cat, data = tab1)
+# m1 <- lm(log(demo_age) ~ user_cat, data = tab1)
+# summary(m1)
+# hist(resid(m1))
+# 
+# boxplot(BMI ~ user_cat, data = tab1)
+# 
+# m2 <- lm(BMI ~ user_cat, data = tab1)
+# summary(m2)
+# hist(resid(m2), breaks = 15)
+# 
+# plot(fitted(m2), resid(m2))
 
 ```
 
@@ -1129,6 +1146,7 @@ post_non_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f0_hat))+
                 geom_line(aes(x = seconds, y = f0_hat + 2*f0_se), linetype = "longdash")+
                 geom_line(aes(x = seconds, y = f0_hat - 2*f0_se), linetype = "longdash")+
                 scale_x_continuous(expand = c(0, 0), limits = c(0,10))+
+                scale_y_continuous(limits = c(-7, 7))+
                 labs(title = "Average Percent Change of a Non-user (Post)", ylab = "Percent Change")+
                 theme_bw()
 
@@ -1146,6 +1164,7 @@ post_occ_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f1_hat))+
                 theme_bw()+
                 scale_x_continuous(expand = c(0, 0), limits = c(0,10), 
                                    breaks = c(0,2,4,6, 8, 10))+
+                scale_y_continuous(limits = c(-7, 7), breaks = c(-6,-4,-2,0,2,4,6))+
                 theme(rect = element_rect(fill = "transparent"))
 
 post_dly_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f2_hat))+
@@ -1161,6 +1180,7 @@ post_dly_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f2_hat))+
                 theme_bw()+
                 scale_x_continuous(expand = c(0, 0), limits = c(0,10), 
                                    breaks = c(0,2,4,6, 8, 10))+
+                scale_y_continuous(limits = c(-7, 7), breaks = c(-6,-4,-2,0,2,4,6))+
                 theme(rect = element_rect(fill = "transparent"))
 
 ylab <- textGrob(label = "Difference in percent change in pupil response", rot = 90, 
@@ -1203,6 +1223,7 @@ post_dlyocc_plt <- ggplot(data = f2_f1_diff_df, aes(x=seconds, y = f2f1_diff))+
                    theme_bw()+
                    scale_x_continuous(expand = c(0, 0), limits = c(0,10), 
                                       breaks = c(0,2,4,6, 8, 10))+
+                   scale_y_continuous(limits = c(-7, 7), breaks = c(-6,-4,-2,0,2,4,6))+
                    theme(rect = element_rect(fill = "transparent"))
 
 ylab <- textGrob(label = "Difference in Percent Change in Pupil Response", rot = 90, 
