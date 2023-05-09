@@ -496,15 +496,18 @@ tab1$demo_gender <- as.character(tab1$demo_gender)
 table1.df <- tbl_summary(tab1,
                          by = user_cat,
                          statistic = list(
-                           all_continuous() ~ "{mean} ({sd})",
+                           demo_age ~ "{mean} ({sd})",
+                           BMI ~ "{mean} ({sd})",
+                           thc.post ~ "{median} ({p25}, {p75})",
+                           postConsumpTimeToTest ~ "{mean} ({sd})",
                            all_categorical() ~ "{n} ({p}%)"
                          ),
                          label = list(
                            demo_age ~ "Age (years)", 
                            demo_gender ~ "Sex", 
                            BMI ~ "Body Mass Index (kg/m^2)", 
-                           thc.post ~ "THC, after cannabis consumption (mg/dL)", 
-                           postConsumpTimeToTest ~ "Time Delay after cannabis consumption (mins)"
+                           thc.post ~ "THC, after cannabis smoking (ng/ml)", 
+                           postConsumpTimeToTest ~ "Time Interval of pupillary measurements after initiation of cannabis smoking (mins)"
                          ),
                          digits = all_continuous() ~ 2, 
                          missing = "no") %>%
@@ -537,6 +540,10 @@ pt.df$postConsumpTimeToTest[pt.df$user_cat == "non-user"] <- NA
 # hist(resid(m2), breaks = 15)
 # 
 # plot(fitted(m2), resid(m2))
+
+boxplot(pt.df$postConsumpTimeToTest)
+hist(pt.df$postConsumpTimeToTest)
+summary(pt.df$postConsumpTimeToTest)
 
 ```
 
