@@ -448,14 +448,17 @@ typical.df$minConstrict[typical.df$seconds == 5] <- "Percent \nchange \nat 5 sec
 
 ggplot(typical.df, aes(x = seconds, y = percent_change))+
   geom_line()+
+  geom_ribbon(data = typical.df[typical.df$seconds >= min.constrict.x, ], 
+              aes(ymin = 0, ymax = percent_change), fill= "lightblue")+
   # geom_text(hjust = 0.001)+
   labs(y = "Percent change in pupil response",
        x = "Seconds from start of light test")+
   scale_x_continuous(expand = c(0,0), limits = c(0, 10), 
                      breaks = c(0,2,4,6,8,10))+
-  annotate("rect", xmin = min.constrict.x, xmax = 10,
-           ymin = min.constrict.y-2, ymax = 1,
-           alpha = 0.5, fill = "lightblue")+
+  scale_y_continuous(expand = c(0,0), limits = c(-30, 1))+
+  # annotate("rect", xmin = min.constrict.x, xmax = 10,
+  #          ymin = min.constrict.y-2, ymax = 1,
+  #          alpha = 0.5, fill = "lightblue")+
   geom_point(x = min.constrict.x, 
              y = min.constrict.y, 
              colour = "darkblue", 
@@ -478,7 +481,7 @@ ggplot(typical.df, aes(x = seconds, y = percent_change))+
                    max.overlaps = 50, 
                    nudge_x = 0.1)+
 
-  annotate("text", x = 6.25, y = 0, 
+  annotate("text", x = 6.25, y = -1, 
            label = "Rebound dilation")
 ```
 
