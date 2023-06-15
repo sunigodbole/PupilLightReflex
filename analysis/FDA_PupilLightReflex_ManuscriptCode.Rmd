@@ -409,6 +409,20 @@ post.right.ids <- unique(ps$subject_id[ps$tp == "post" & ps$eye == "Right"])
 pre.right.ids <- unique(ps$subject_id[ps$tp == "pre2" & ps$eye == "Right"])
 
 post.exclude.ids <- post.right.ids[!(post.right.ids %in% pre.right.ids)]
+
+# ### Write Analytic Files
+# 
+# write.csv(pt.analytic.df, 
+#          file.path(data_folder, "PupilLightResponse_AnalyticSample_Demog.csv"), 
+#          row.names = F)
+# 
+# write.csv(right_0.post.w, 
+#           file.path(data_folder, "PupilLightResponse_RightEye_Post_Wide.csv"), 
+#           row.names = F)
+# 
+# write.csv(right_0.post, 
+#           file.path(data_folder, "PupilLightResponse_RightEye_Post_Long.csv"), 
+#           row.names = F)
 ```
 
 ```{r vis_exclPts_wPostdata}
