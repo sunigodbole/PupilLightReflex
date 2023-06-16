@@ -1250,7 +1250,7 @@ post_dlyocc_plt <- ggplot(data = f2_f1_diff_df, aes(x=seconds, y = f2f1_diff))+
                    scale_y_continuous(limits = c(-7, 7), breaks = c(-6,-4,-2,0,2,4,6))+
                    theme(rect = element_rect(fill = "transparent"))
 
-ylab <- textGrob(label = "Difference in Percent Change in Pupil Response", rot = 90, 
+ylab <- textGrob(label = "Difference in percent change in pupil response", rot = 90, 
                  gp = gpar(fontsize = 12))
 posval_do <- textGrob(label = sapply(strwrap("Less Constriction in Daily User", width = 15, 
                                           simplify = F),
