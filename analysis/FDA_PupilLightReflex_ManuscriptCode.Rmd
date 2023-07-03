@@ -16,7 +16,6 @@ output:
 ```{r setup, include=FALSE}
 library(openxlsx)
 library(ggplot2)
-library(table1)
 library(refund)
 library(refund.shiny)
 library(pROC)
@@ -38,6 +37,7 @@ library(ggrepel)
 knitr::opts_chunk$set(
   warning = FALSE,
   message = FALSE,
+  dpi = 300,
   fig.width = 9,
   fig.height = 4,
   fig.path = '../figs/'
