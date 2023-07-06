@@ -37,7 +37,7 @@ library(ggrepel)
 knitr::opts_chunk$set(
   warning = FALSE,
   message = FALSE,
-  dpi = 300,
+  dpi = 250,
   fig.width = 9,
   fig.height = 4,
   fig.path = '../figs/'
@@ -46,8 +46,8 @@ knitr::opts_chunk$set(
 theme_set(theme_bw() + theme(legend.position = "bottom"))
 
 # ps_folder <- "C:/Repositories/Dissertation/PupilSize_img"
-# data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
-data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data" # Work laptop
+data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
+# data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data" # Work laptop
 # data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data"
 ps_folder <- "202208_PupilLightReflex"
 
@@ -535,8 +535,8 @@ table1.df <- tbl_summary(tab1,
   bold_labels()
 table1.df
 
-table1.df %>% as_flex_table() %>% flextable::save_as_docx(path = "../results/tabl1.docx")
-tab1_latex <- table1.df %>% as_gt() %>% gt::as_latex()
+# table1.df %>% as_flex_table() %>% flextable::save_as_docx(path = "../results/tabl1.docx")
+# tab1_latex <- table1.df %>% as_gt() %>% gt::as_latex()
 
 # table1.df %>% as_gt() %>% gt::gtsave(filename = "../results/tabl1.png")
 
@@ -562,10 +562,6 @@ boxplot(pt.df$postConsumpTimeToTest)
 hist(pt.df$postConsumpTimeToTest)
 summary(pt.df$postConsumpTimeToTest)
 
-```
-
-```{r}
-as.character(tab1_latex)
 ```
 
 
