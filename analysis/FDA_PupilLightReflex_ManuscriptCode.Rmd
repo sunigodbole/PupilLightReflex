@@ -37,7 +37,7 @@ library(ggrepel)
 knitr::opts_chunk$set(
   warning = FALSE,
   message = FALSE,
-  dpi = 250,
+  dpi = 500,
   fig.width = 9,
   fig.height = 4,
   fig.path = '../figs/'
@@ -435,7 +435,7 @@ for(i in post.exclude.ids){
 ```
 
 #Figure Typical Pupil Light Response
-```{r vis_typicalTraj}
+```{r vis_typicalTraj, dev='jpeg'}
 # for(i in non_user.id){
 #   print(ggplot(right_0.post[right_0.post$subject_id == i, ], 
 #          aes(x = frame, y = percent_change))+
@@ -855,7 +855,7 @@ plot.roc <- ggplot(data = auc_inference.l, aes(d = smoker, m = prediction, color
 plot.roc
 ```
 
-```{r roc_sofr_plots, fig.height= 4, fig.width=8, warning=FALSE}
+```{r roc_sofr_plots, fig.height= 4, fig.width=8, warning=FALSE, dev='jpeg'}
 
 final.roc <- grid.arrange(plot.roc, sofr_plot, 
                           layout_matrix = cbind(1,2))
@@ -1427,7 +1427,7 @@ post_allProfile
 
 ### Manuscript Figure
 
-```{r fosr_model_plots, fig.height=8, fig.width=15}
+```{r fosr_model_plots, fig.height=8, fig.width=15, dev='jpeg'}
 final.fosr <- grid.arrange(post_allProfile, post_occ_coef, 
                            post_dly_coef, post_dlyocc_coef, 
                           layout_matrix = rbind(c(1,2),
@@ -1694,7 +1694,7 @@ post_smokerProfile <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = 
 post_smokerProfile
 ```
 
-```{r PCTT_hist_response, fig.height= 4, fig.width=8, warning=FALSE}
+```{r PCTT_hist_response, fig.height= 4, fig.width=8, warning=FALSE, dev='jpeg'}
 
 final.pctt <- grid.arrange(pctt_hist, post_smokerProfile, 
                           layout_matrix = cbind(1,2))
