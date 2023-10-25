@@ -13,3 +13,6 @@ analysis/*_cache/
 drafts/*_cache/
 .RData
 .Ruserdata
+
+### Manuscript Drafts
+drafts
