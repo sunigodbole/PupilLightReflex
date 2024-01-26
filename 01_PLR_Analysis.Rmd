@@ -1,0 +1,1323 @@
+---
+title: "01_PLR_Analysis"
+author: "Suni Godbole"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: lumen
+---
+
+# Analysis File for manuscript
+
+```{r setup, include=FALSE}
+library(openxlsx)
+library(ggplot2)
+library(refund)
+library(refund.shiny)
+library(pROC)
+library(stringr)
+library(PerformanceAnalytics)
+library(mgcv)
+library(grid)
+library(gridExtra)
+library(haven)
+library(Hmisc)
+library(ggpmisc)
+library(viridis)
+library(gtsummary)
+library(cowplot)
+library(ggpubr)
+library(plotROC)
+library(ggrepel)
+
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE,
+  dpi = 500,
+  fig.width = 9,
+  fig.height = 4,
+  fig.path = '../figs/'
+)
+
+theme_set(theme_bw() + theme(legend.position = "bottom"))
+```
+
+
+Read in Analytic Data files
+
+```{r readIn}
+pt.analytic.df <- read.csv(here::here("data", "PupilLightResponse_AnalyticSample_Demog.csv"), 
+                           header = T, stringsAsFactors = F)
+
+right_0.post.w <- read.csv(here::here("data", "PupilLightResponse_RightEye_Post_Wide.csv"), 
+                           header = T, stringsAsFactors = F)
+
+rownames(right_0.post.w) <- right_0.post.w$subject_id
+
+right_0.post <- read.csv(here::here("data", "PupilLightResponse_RightEye_Post_Long.csv"), 
+                           header = T, stringsAsFactors = F)
+```
+
+
+#Figure Typical Pupil Light Response
+```{r vis_typicalTraj, dev='jpeg'}
+# for(i in non_user.id){
+#   print(ggplot(right_0.post[right_0.post$subject_id == i, ], 
+#          aes(x = frame, y = percent_change))+
+#         labs(x = i)+
+#         geom_line())
+# }
+
+typical.df <- right_0.post[right_0.post$subject_id == "001-032", ]
+typical.df$seconds <- typical.df$frame/30
+
+typical_1 <- typical.df$percent_change[typical.df$seconds == 1]
+typical_2 <- typical.df$percent_change[typical.df$seconds == 2]
+typical_5 <- typical.df$percent_change[typical.df$seconds == 5]
+
+min.constrict.x <- typical.df$seconds[typical.df$percent_change == min(typical.df$percent_change, na.rm = T)][1]
+min.constrict.y <- min(typical.df$percent_change, na.rm = T)
+
+typical.df$minConstrict <- ifelse(typical.df$seconds == min.constrict.x & 
+                          typical.df$percent_change == min.constrict.y, 
+                          "Point of \nminimal \nconstriction", "")
+
+typical.df$minConstrict[typical.df$seconds == 2] <- "Percent \nchange \nat 2 seconds"
+typical.df$minConstrict[typical.df$seconds == 5] <- "Percent \nchange \nat 5 seconds"
+
+ggplot(typical.df, aes(x = seconds, y = percent_change))+
+  geom_line()+
+  geom_ribbon(data = typical.df[typical.df$seconds >= min.constrict.x, ], 
+              aes(ymin = 0, ymax = percent_change), fill= "lightblue")+
+  # geom_text(hjust = 0.001)+
+  labs(y = "Percent change in pupil response",
+       x = "Seconds from start of light test")+
+  scale_x_continuous(expand = c(0,0), limits = c(0, 10), 
+                     breaks = c(0,2,4,6,8,10))+
+  scale_y_continuous(expand = c(0,0), limits = c(-30, 1))+
+  # annotate("rect", xmin = min.constrict.x, xmax = 10,
+  #          ymin = min.constrict.y-2, ymax = 1,
+  #          alpha = 0.5, fill = "lightblue")+
+  geom_point(x = min.constrict.x, 
+             y = min.constrict.y, 
+             colour = "darkblue", 
+             size = 2)+
+  geom_point(x = 5, 
+             y = typical_5, 
+             colour = "violet", 
+             size = 2)+
+  geom_point(x = 2, 
+             y = typical_2, 
+             colour = "violet", 
+             size = 2)+
+  geom_vline(xintercept = min.constrict.x, color = "darkblue", linetype ="dotted")+
+  # annotate("text", x =min.constrict.x-0.25, 
+  #          y = min.constrict.y-0.5,
+  #          label = "Point of \nminimal \nconstriction", 
+  #          hjust= 1)+
+  geom_text_repel(aes(label = minConstrict), 
+                   force = 50, 
+                   max.overlaps = 50, 
+                   nudge_x = 0.1)+
+
+  annotate("text", x = 6.25, y = -1, 
+           label = "Rebound dilation")
+```
+
+# Figure Individual Pupil Trajectories with a couple highlighted
+
+```{r postPlot}
+post.user <- ggplot(right_0.post, aes(x=seconds, y = percent_change, group = subject_id))+
+             geom_line(show.legend = FALSE, alpha = 0.2)+
+             #facet_grid(rows = vars(user_cat))+
+             stat_summary(aes(x = seconds, y = percent_change, group = user_cat), 
+                          fun = "mean", linewidth = 1.1, geom = "line")+
+             labs(y = "Percent change in pupil response", 
+                  x = "Seconds from start of light test")+
+             theme_bw()
+
+post.user
+```
+
+
+# Table 1
+
+No Consumption end time recorded for non-users
+```{r tab1_analyticN}
+pt.analytic.df$postConsumpTimeToTest[pt.analytic.df$user_cat == "non-user"] <- 0
+
+tab1 <- pt.analytic.df[,  c("user_cat", "demo_age", "demo_gender", "BMI", "thc.post", "postConsumpTimeToTest")]
+tab1$demo_gender <- as.character(tab1$demo_gender)
+
+table1.df <- tbl_summary(tab1,
+                         by = user_cat,
+                         statistic = list(
+                           demo_age ~ "{mean} ({sd})",
+                           BMI ~ "{mean} ({sd})",
+                           thc.post ~ "{median} ({p25}, {p75})",
+                           postConsumpTimeToTest ~ "{mean} ({sd})",
+                           all_categorical() ~ "{n} ({p}%)"
+                         ),
+                         label = list(
+                           demo_age ~ "Age (years)", 
+                           demo_gender ~ "Sex", 
+                           BMI ~ "Body Mass Index (kg/m^2)", 
+                           thc.post ~ "THC, after cannabis smoking (ng/ml)", 
+                           postConsumpTimeToTest ~ "Time Interval of pupillary measurements after initiation of cannabis smoking (mins)"
+                         ),
+                         digits = all_continuous() ~ 2, 
+                         missing = "no") %>%
+  modify_header(all_stat_cols() ~ "**{level}**\n(N = {n})") %>%
+  add_overall(last = TRUE, col_label = "**Total**\n(N = {N})") %>%
+  add_p() %>%
+  modify_spanning_header(c("stat_1", "stat_2", "stat_3") ~ "**Cannabis Use Group**") %>%
+  bold_labels()
+table1.df
+
+pt.analytic.df$postConsumpTimeToTest[pt.analytic.df$user_cat == "non-user"] <- NA
+
+boxplot(pt.analytic.df$postConsumpTimeToTest)
+hist(pt.analytic.df$postConsumpTimeToTest)
+summary(pt.analytic.df$postConsumpTimeToTest)
+```
+
+```{r saveTable1}
+table1.df %>% 
+  as_gt() %>%
+  gt::gtsave(filename = "../results/tabl1.png")
+```
+
+# Analysis
+
+## POST DATA: Logistic Regression models to predict Smoker vs non-smoker using post data. plot AUC
+
+```{r fpca_post, echo = F}
+pctChg_vars <- names(right_0.post.w)[grepl("percent_change", names(right_0.post.w))]
+post_right_0.fpca <- fpca.face(Y = as.matrix(right_0.post.w[, pctChg_vars]), 
+                               pve = 0.95, knots = 30, var = T)
+
+post_right_0.fpca.pve <- round(post_right_0.fpca$evalues/sum(post_right_0.fpca$evalues)*100, 2)
+# post_right_0.fpca.pve
+
+post_right_scores <- as.data.frame(post_right_0.fpca$scores)
+names(post_right_scores) <- c("PC1", "PC2", "PC3", "PC4")
+post_right_scores$subject_id <- rownames(post_right_scores)
+
+pt.scores <- merge(post_right_scores, pt.analytic.df, 
+                   by = c("subject_id"), 
+                   all.x = T)
+
+pt.scores$smoker <- ifelse(pt.scores$user_cat %in% c("daily", "occasional"),1, 0)
+```
+
+```{r auc, echo = F, message = F}
+auc_inference <- data.frame(subject_id = pt.scores$subject_id, 
+                            smoker = pt.scores$smoker,
+                            stringsAsFactors = F)
+
+
+m1.scalar <- glm(smoker ~ min_constriction.post + AUC.post + slope.post, family = "binomial", data = pt.scores)
+# summary(m1.scalar)
+pt.scores$pred <- predict(m1.scalar, pt.scores)
+pt.scalar.roc <- roc(response = pt.scores$smoker, predictor = pt.scores$pred, ci=TRUE)
+# pt.scalar.roc
+post.auc.scalar <- pt.scalar.roc$auc
+post.auc.lci.scalar <- as.numeric(pt.scalar.roc$ci)[1]
+post.auc.uci.scalar <- as.numeric(pt.scalar.roc$ci)[3]
+
+auc_inference$post_SF_aucScores <- pt.scalar.roc$original.predictor
+
+
+
+# plot.roc(pt.scalar.roc, main = "Prediction of Smoker by Scalar Features in Post")
+```
+
+## SoFR for prediction of smoking
+
+Another method that can be used to predict smoking status is a scalar-on-function regression model which uses differences between the whole trajectories to determine smoking status. However, when there are missing values (due to different test durations), all trajectories should be truncated to the shortest or the values should be imputed with fPCA. (See exploration of using SoFR line starting at 3000) 
+
+```{r sofr_fpcaImpute_roc}
+pctChg_vars <- names(right_0.post.w)[grepl("percent_change", names(right_0.post.w))]
+
+sofr_impute_df <- right_0.post.w[, pctChg_vars]
+rownames(sofr_impute_df) <- rownames(right_0.post.w)
+
+sofr_fpca <- fpca.face(as.matrix(sofr_impute_df))
+sofr_fpca2 <- sofr_fpca$Yhat
+names(sofr_fpca2) <- names(sofr_impute_df)
+
+sofr_imputed <- sofr_impute_df
+sofr_imputed[is.na(sofr_imputed)] <-  sofr_fpca2[is.na(sofr_imputed)]
+
+ncols = ncol(sofr_imputed)
+
+smk.df <- pt.analytic.df[, c("subject_id", "user_cat")]
+smk.df$smoker <- ifelse(pt.analytic.df$user_cat %in% c("daily", "occasional"), 1, 0)
+
+sind <- seq(0, 1, len = ncols)
+smat <- matrix(sind, nrow(smk.df), ncols, byrow = T)
+
+# smk.df$Zsm <- I(Zsm)
+smk.df$Zraw <- I(as.matrix(sofr_imputed))
+smk.df$smat <- I(smat)
+smk.df$lmat <- I(matrix(1/ncols, nrow(smk.df), ncols))
+smk.df$zlmat <- I(smk.df$lmat * smk.df$Zraw)
+
+smk_fglm_ps2 <- gam(smoker ~ s(smat, by=zlmat, bs = "cr", k = 30), data=smk.df, 
+                   method = "REML", family = binomial)
+summary(smk_fglm_ps2)
+
+pt.sofr.roc <- roc(smk_fglm_ps2$model$smoker, smk_fglm_ps2$fitted.values, ci = TRUE)
+pt.sofr.roc.auc <- auc(pt.sofr.roc)
+pt.sofr.auc.lci <- as.numeric(pt.sofr.roc$ci)[1]
+pt.sofr.auc.uci <- as.numeric(pt.sofr.roc$ci)[3]
+
+
+auc.df <- data.frame("Label" = c("Post AUC Scalar Feat", "Post SoFR AUC"), 
+                     "AUC" = c(post.auc.scalar, pt.sofr.roc.auc),
+                     "lci" = c(post.auc.lci.scalar, pt.sofr.auc.lci), 
+                     "uci" = c(post.auc.uci.scalar, pt.sofr.auc.uci),
+                     stringsAsFactors = F)
+
+
+sofr_auc <- data.frame("subject_id" = smk.df$subject_id, 
+                       "smoker" = smk.df$smoker, 
+                       "post_sofr_scores" = smk_fglm_ps2$fitted.values)
+
+auc_inference <- merge(auc_inference, sofr_auc, 
+                       by = c("subject_id", "smoker"))
+```
+
+### Plot of SoFR with fPCA imputed data for missing values
+
+```{r sofr_plot_setup}
+df_sofr <- data.frame("smat" = seq(0, 1, length.out = ncol(smk.df$smat)),
+                      "zlmat" = 1)
+sofr_pred <- predict(smk_fglm_ps2, newdata = df_sofr, se.fit = TRUE, type = "iterms")
+# sofr_pred2 <- predict(smk_fglm_ps2, newdata = df_sofr, se.fit = TRUE, type = "terms")
+plot.sofr <- data.frame("frame" = 0:(ncol(smk.df$smat) - 1),
+                            "f0" = sofr_pred$fit[, 1],
+                            'f0.se' = sofr_pred$se.fit[, 1])
+
+plot.sofr$lci <- exp(plot.sofr$f0 - 1.96*plot.sofr$f0.se)
+plot.sofr$uci <- exp(plot.sofr$f0 + 1.96*plot.sofr$f0.se)
+plot.sofr$OR <- exp(plot.sofr$f0)
+plot.sofr$sec <- plot.sofr$frame/30
+plot.sofr$p <- exp(plot.sofr$f0)/(1+exp(plot.sofr$f0))
+
+```
+
+```{r findSigRegions}
+sigRegion <- function(df, crit.val, imp.var){
+  time <- imp.var[1]
+  est <- imp.var[2]
+  lci <- imp.var[3]
+  uci <- imp.var[4]
+  
+  
+  crit.rows <- which((df[, lci] < crit.val & df[, uci] < crit.val) |
+                       (df[, lci] > crit.val & df[, uci] > crit.val))
+  
+  # print(crit.rows)
+  
+  group <- vector(mode = "numeric", length = length(crit.rows))
+  grp.ind <- 1
+  for(i in 1:length(crit.rows)){
+    if(i == 1){
+      group[i] <- grp.ind}
+    else(if(i > 1){
+      if(crit.rows[i] - crit.rows[i-1] == 1){
+        group[i] <- grp.ind
+      }
+      else(if(crit.rows[i] - crit.rows[i-1] != 1){
+        grp.ind <- grp.ind+1
+        group[i] <- grp.ind
+      })
+    })
+    
+  }
+  # print(group)
+  
+  num.grp <- unique(group)
+  ind.df <- data.frame(group = NA, 
+                       start = NA, 
+                       end = NA)
+  for(i in num.grp){
+    ind.df[i,] <- c(i, min(crit.rows[group == i]), max(crit.rows[group == i]))
+  }
+  
+  # print(ind.df)
+  
+  res.df <- data.frame(int.start = NA, 
+                       int.end = NA, 
+                       est.time = NA,
+                       est = NA,
+                       lci = NA,
+                       uci = NA)
+  # print(nrow(ind.df))
+  
+  for(i in 1:nrow(ind.df)){
+    
+    sub.df <- df[(ind.df$start[i]):(ind.df$end[i]), ]
+    
+    # print(sub.df[1, ])
+    
+    if(sub.df[1, lci] > crit.val & sub.df[1, uci] >crit.val){
+      start1 <- round(sub.df[1, time], 2)
+      end1 <- round(sub.df[nrow(sub.df), time], 2)
+      or1 <- max(sub.df[ , est])
+      peaktime1 <- round(sub.df[sub.df[, est] == or1, time], 2)
+      lci1 <- round(sub.df[sub.df[, est] == or1, lci], 2)
+      uci1 <- round(sub.df[sub.df[, est] == or1, uci], 2)
+      or1 <- round(or1, 2)
+      
+      res.df[i, ] <- c(start1, end1, peaktime1, or1, lci1, uci1)
+      # print(res.df)
+      
+    }
+    if(sub.df[1, lci] < crit.val & sub.df[1, uci] < crit.val){
+      start2 <- round(sub.df[1, time], 2)
+      end2 <- round(sub.df[nrow(sub.df), time], 2)
+      or2 <- min(sub.df[, est])
+      peaktime2 <- round(sub.df[sub.df[, est] == or2, time], 2)
+      lci2 <- round(sub.df[sub.df[, est] == or2, lci], 2)
+      uci2 <- round(sub.df[sub.df[, est] == or2, uci], 2)
+      or2 <- round(or2, 2)
+      
+      res.df[i, ] <- c(start2, end2, peaktime2, or2, lci2, uci2)
+      # print(res.df)
+    }
+  }
+  
+  
+  # crit.ind <- by(crit.rows, INDICES = list(group), FUN = function(x) c(min(x), max(x)))
+  return(res.df)
+}
+```
+
+### Extract Significant Regions in SoFR analysis
+```{r sofr_sigRegions}
+sofr.sigRegions <- sigRegion(plot.sofr, 1, imp.var = c("sec", "OR", "lci", "uci"))
+```
+
+### Plot SoFR Results
+```{r sofr_plot}
+sofr_plot <- ggplot(data = plot.sofr, aes(x=frame/30, y = exp(f0)))+
+  geom_line()+
+  geom_line(aes(x=frame/30, y = exp(f0-1.96*f0.se)), linetype = 'longdash')+
+  geom_line(aes(x=frame/30, y = exp(f0+1.96*f0.se)), linetype = 'longdash')+
+  geom_segment(data=sofr.sigRegions, aes(x = int.start, y=1, xend= int.end, yend = 1), 
+               color = "darkred", linewidth =1.2)+
+  # geom_hline(yintercept = 1, color = "darkred", linetype = 1) +
+  scale_x_continuous(expand = c(0, 0), limits = c(0,10), 
+                     breaks = c(0,2,4,6,8,10))+
+  scale_y_continuous(limits = c(0,8), 
+                     breaks = c(0,1,2,3,4,6,8)) +
+  labs(title = "", 
+       x = "Seconds after start of light test", 
+       y = "Odds ratio between smokers and non-smokers")+
+  theme_bw()
+
+# sofr_plot_prob <- ggplot(data = plot.sofr, aes(x=frame/30, y = p))+
+#                   geom_line()+
+#                   geom_line(aes(x=frame/30, y = exp(f0-1.96*f0.se)/(1+exp(f0-1.96*f0.se))), linetype = 'longdash')+
+#                   geom_line(aes(x=frame/30, y = exp(f0+1.96*f0.se)/(1+exp(f0+1.96*f0.se))), linetype = 'longdash')+
+#                   geom_segment(data=sofr.sigRegions, aes(x = int.start, y=0.50, xend= int.end, yend = 0.5),
+#                                color = "darkred", linetype = "dotted", linewidth =1.2)+
+#                 # geom_hline(yintercept = 1, color = "darkred", linetype = 1) +
+#                   scale_x_continuous(expand = c(0, 0), limits = c(0,10))+
+#                   ylim(0,1) +
+#                   labs(title = "", 
+#                        x = "Seconds after start of light test", 
+#                        y = "Probability of being a smoker")+
+#                   theme_bw()
+
+sofr_plot
+```
+
+
+### AUC Plot Comparing feature models and full trajectory models
+```{r auc_plot_post, fig.width=5, fig.height=5, warning=FALSE}
+# "Prediction of Cannabis Use with Single Summary Features and Full Trajectory Model after Cannabis Consumption"
+# jpeg(file.path(res_folder, "AUC_4PC_ScalarFeatures.jpg"), 
+#      height = 6, width = 8, res = 300, units = "in")
+roc.col <- viridis(5)
+  
+auc_inference.l <- reshape(auc_inference, 
+                           varying = c("post_SF_aucScores", "post_sofr_scores"), 
+                           v.names = "prediction", 
+                           timevar = "model", 
+                           times = c("post_SF_aucScores", "post_sofr_scores"), 
+                           direction = "long")
+auc_inference.l$modelName <- ifelse(auc_inference.l$model == "post_SF_aucScores", 
+                                    paste0("Traditional LogRegr AUC: ",round(post.auc.scalar, 3)), 
+                                    paste0("Functional LogRegr AUC: ", round(pt.sofr.roc.auc, 3)))
+
+
+plot.roc <- ggplot(data = auc_inference.l, aes(d = smoker, m = prediction, color = modelName))+
+            geom_roc(n.cuts=0)+
+            labs(x = "1-Specificity", 
+                 y = "Sensitivity", 
+                 color = "")+
+            scale_color_manual(values = roc.col[c(5,2)]) +
+            theme_bw()+
+            theme(legend.position = c(0.6,0.2))
+plot.roc
+```
+
+```{r roc_sofr_plots, fig.height= 4, fig.width=8, warning=FALSE, dev='jpeg'}
+
+final.roc <- grid.arrange(plot.roc, sofr_plot, 
+                          layout_matrix = cbind(1,2))
+
+labeled.roc.plot <- as_ggplot(final.roc) +
+                    draw_plot_label(label = c("A", "B"), size = 15, 
+                                    x = c(0, 0.5), y = c(1, 1))
+
+labeled.roc.plot
+```
+
+
+## Compare AUC across models
+```{r compare_auc}
+auc.df$AUC <- round(as.numeric(auc.df$AUC), 3)
+
+knitr::kable(auc.df)
+```
+
+AUC Inference
+```{r auc_sig}
+
+Vr_10 <- function(nN, srpi, srnj){
+  Vr_10i <- vector(mode = "numeric", length = length(srpi))
+  
+  for(i in 1:length(srpi)){
+    Vr_10i[i] = (1/nN)*(sum(srpi[i] > srnj)+ 0.5*sum(srpi[i] ==  srnj))
+  }
+  
+  return(Vr_10i)
+}
+
+Vr_01 <- function(pN, srpi, srnj){
+  Vr_01i <- vector(mode = "numeric", length = length(srnj))
+  
+  for(i in 1:length(srnj)){
+    Vr_01i[i] = (1/pN)*(sum(srnj[i] < srpi)+ 0.5*sum(srnj[i] ==  srpi))
+  }
+  
+  return(Vr_01i)
+}
+
+w10 <- function(nP, v10_r, auc_r, v10_s, auc_s){
+  diff_r <- vector(mode = "numeric", length = length(v10_r))
+  diff_s <- vector(mode = "numeric", length = length(v10_s))
+  
+  for(i in 1:length(v10_r)){
+    diff_r[i] <- v10_r[i] - auc_r
+    diff_s[i] <- v10_s[i] - auc_r
+  }
+  
+  res <- (nP-1)^(-1)* sum(diff_r * diff_s)
+  
+  return(res)
+}
+
+w01 <- function(nN, v01_r, auc_r, v01_s, auc_s){
+  diff_r <- vector(mode = "numeric", length = length(v01_r))
+  diff_s <- vector(mode = "numeric", length = length(v01_s))
+  
+  for(i in 1:length(v01_r)){
+    diff_r[i] <- v01_r[i] - auc_r
+    diff_s[i] <- v01_s[i] - auc_r
+  }
+  res <- (nN-1)^(-1)* sum(diff_r * diff_s)
+  return(res)
+}
+
+w_rs <- function(nP, nN, srpi_r, srnj_r, srpi_s, srnj_s, auc_r, auc_s){
+  v10_r <-  Vr_10(nN, srpi_r, srnj_r)
+  v01_r <-  Vr_01(pN=nP, srpi_r, srnj_r)
+  
+  v10_s <-  Vr_10(nN, srpi_s, srnj_s)
+  v01_s <-  Vr_01(pN=nP, srpi_s, srnj_s)
+  
+  w10_rs <- w10(nP, v10_r, auc_r, v10_s, auc_s)
+  w01_rs <- w01(nN, v01_r, auc_r, v01_s, auc_s)
+  
+  
+  res <-  (nP)^(-1)*w10_rs + (nN)^(-1)*w01_rs
+  return(res)
+}
+
+w_postSF_postSF <- w_rs(nP = sum(auc_inference$smoker == 1),
+                        nN = sum(auc_inference$smoker == 0), 
+                        srpi_r = auc_inference$post_SF_aucScores[auc_inference$smoker == 1],
+                        srnj_r = auc_inference$post_SF_aucScores[auc_inference$smoker == 0],
+                        srpi_s = auc_inference$post_SF_aucScores[auc_inference$smoker == 1],
+                        srnj_s = auc_inference$post_SF_aucScores[auc_inference$smoker == 0],
+                        auc_r = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"],
+                        auc_s = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"])
+
+w_postSOFR_postSF <- w_rs(nP = sum(auc_inference$smoker == 1),
+                        nN = sum(auc_inference$smoker == 0), 
+                        srpi_r = auc_inference$post_SF_aucScores[auc_inference$smoker == 1],
+                        srnj_r = auc_inference$post_SF_aucScores[auc_inference$smoker == 0],
+                        srpi_s = auc_inference$post_sofr_scores[auc_inference$smoker == 1],
+                        srnj_s = auc_inference$post_sofr_scores[auc_inference$smoker == 0],
+                        auc_r = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"],
+                        auc_s = auc.df$AUC[auc.df$Label == "Post AUC SoFR"])
+
+
+w_postSOFR_postSOFR <- w_rs(nP = sum(auc_inference$smoker == 1),
+                        nN = sum(auc_inference$smoker == 0), 
+                        srpi_r = auc_inference$post_SF_aucScores[auc_inference$smoker == 1],
+                        srnj_r = auc_inference$post_SF_aucScores[auc_inference$smoker == 0],
+                        srpi_s = auc_inference$post_SF_aucScores[auc_inference$smoker == 1],
+                        srnj_s = auc_inference$post_SF_aucScores[auc_inference$smoker == 0],
+                        auc_r = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"],
+                        auc_s = auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"]) 
+
+z_postSF_postSOFR <- (auc.df$AUC[auc.df$Label == "Post AUC Scalar Feat"] - auc.df$AUC[auc.df$Label == "Post SoFR AUC"])/
+  (sqrt(w_postSF_postSF +  w_postSOFR_postSOFR - w_postSOFR_postSF))
+
+auc_compare <- data.frame("Test Desciption" = "AUC-postSF v AUC-postSoFR", 
+                          "z" = round(z_postSF_postSOFR, 3))
+
+auc_compare$p <- round((1-pnorm(abs(auc_compare$z)))*2, 3)
+
+knitr::kable(auc_compare)
+```
+
+# Function on Scalar Regression
+## Post
+
+$$ 
+\begin{aligned}
+Y_{i}(t) &= f_0(t) + f_1(t)*I(user = occasional) + f_2(t)*I(user = daily) + b_i(t) + \epsilon_i(t)\\
+& b_i(t) \sim GP(0, \Sigma_b) \\
+& \epsilon_i(t) \sim N(0, \sigma_{\epsilon}^2) \\
+&= \sum_{k=1}^K \xi_{0k}\phi_{0k}(t_i) + \sum_{k=1}^K \xi_{1k}\phi_{1k}(t_i)*I(user = occasional) + \sum_{k=1}^K \xi_{2k}\phi_{2k}(t_i)*I(user = daily) + \sum_{k=1}^K \xi_{ik}\phi_k(t_i) + \epsilon_i(t)\\
+\end{aligned}
+$$
+
+### Mean function for non-user
+$$
+\begin{aligned}
+Y_{i}(t) &= f_0(t)\\
+&=\sum_{k=1}^K \xi_{0k}\phi_{0k}(t_i) \\
+&= \Phi_0\xi_0
+\end{aligned}
+$$
+
+### Mean function for occasional user
+$$
+\begin{aligned}
+Y_{i}(t) &= f_0(t) + f_1(t) \\  
+&=\sum_{k=1}^K \xi_{0k}\phi_{0k}(t_i) + \sum_{k=1}^K \xi_{1k}\phi_{1k}(t_i)\\
+&= \Phi_0\xi_0 + \Phi_1\xi_1\\ 
+&= [ \Phi_0, \Phi_1 ] \xi
+\end{aligned}
+$$
+
+### Mean function for daily user
+$$
+\begin{aligned}
+Y_{i}(t) &= f_0(t) + f_2(t) \\  
+&=\sum_{k=1}^K \xi_{0k}\phi_{0k}(t_i) + \sum_{k=1}^K \xi_{2k}\phi_{2k}(t_i) \\
+&= \Phi_0\xi_0 + \Phi_2\xi_2\\
+&= [ \Phi_0, \Phi_2 ] \xi
+\end{aligned}
+$$
+
+
+```{r pt_analytic, echo = F}
+#pt.analytic.df <- pt.df[pt.df$subject_id %in% analytic.N, ]
+pt.analytic.df$occasional <- ifelse(pt.analytic.df$user_cat == "occasional", 1, 0)
+pt.analytic.df$daily  <- ifelse(pt.analytic.df$user_cat == "daily", 1, 0)
+
+
+pt.analytic.df <- pt.analytic.df[order(pt.analytic.df$subject_id), ]
+```
+
+
+```{r post_gam}
+right_0.gam.df <- merge(right_0.post, pt.analytic.df, 
+                        by = c("subject_id", "user_cat"))
+
+right_0.gam.df$sind <- right_0.gam.df$frame/400
+
+m.post_gam <- mgcv::gam(percent_change ~ s(sind, k=30, bs="cr") + 
+                          s(sind, by=occasional, k=30, bs = "cr") + 
+                          s(sind, by=daily, k=30, bs = "cr"), 
+                  data = right_0.gam.df, method = "REML")
+
+## Create a matrix of residuals
+post_gam.resid <- cbind(right_0.gam.df[!(is.na(right_0.gam.df$percent_change)), 
+                                       c("subject_id", "frame")], 
+                        m.post_gam$residuals)
+names(post_gam.resid) <- c("subject_id", "frame", "resid")
+
+resid_mat <- reshape(post_gam.resid[, c("subject_id", "frame", "resid")], 
+                     timevar = "frame", 
+                     idvar = "subject_id", 
+                     direction = "wide")
+rownames(resid_mat) <- resid_mat$subject_id
+resid_mat$subject_id <- NULL
+
+resid_mat <- as.matrix(resid_mat)
+
+post_gam.fpca <- fpca.face(resid_mat, knots = 15)
+
+#Create data frame of eigen functions and attach to original data
+Phi_mat <- as.data.frame(post_gam.fpca$efunctions)
+colnames(Phi_mat) <- paste0("Phi", seq(1, post_gam.fpca$npc))
+Phi_mat$frame <- as.numeric(rownames(Phi_mat)) -1
+
+right_0.gam.df <- merge(right_0.gam.df, Phi_mat, 
+                        by = "frame", 
+                        all.x = T)
+right_0.gam.df <- right_0.gam.df[order(right_0.gam.df$subject_id, right_0.gam.df$frame), ]
+right_0.gam.df$subject_id <- as.factor(right_0.gam.df$subject_id)
+
+post_gam.fri <- mgcv::bam(percent_change ~ 
+                            s(sind, k=30, bs="cr") + 
+                            s(sind, by=occasional, k=30, bs = "cr") + 
+                            s(sind, by=daily, k=30, bs = "cr") +
+                            s(subject_id, by = Phi1, bs="re") + s(subject_id, by = Phi2, bs="re")+
+                            s(subject_id, by = Phi3, bs="re") + s(subject_id, by = Phi4, bs="re"), 
+                          method = "fREML", data = right_0.gam.df, discrete = TRUE)
+
+
+summary(post_gam.fri)
+```
+
+```{r getLegend, echo = F}
+g_legend<-function(a.gplot){
+  tmp <- ggplot_gtable(ggplot_build(a.gplot))
+  leg <- which(sapply(tmp$grobs, function(x) x$name) == "guide-box")
+  legend <- tmp$grobs[[leg]]
+  return(legend)}
+```
+
+### Plotting trajectory of occasional & daily user
+```{r plot_occ}
+post_gam.coef <- post_gam.fri$coefficients
+post_gam.cov <- vcov.gam(post_gam.fri)
+
+df_pred_non <- data.frame("sind" = unique(right_0.gam.df$sind), "occasional" = 0, "daily" = 0, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = right_0.gam.df$subject_id[1])
+
+lpmat_non <- predict(post_gam.fri, newdata=df_pred_non, se.fit=TRUE, type = "lpmatrix")
+
+
+df_pred_occ <- data.frame("sind" = unique(right_0.gam.df$sind), "occasional" = 1, "daily" = 0, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = right_0.gam.df$subject_id[1])
+
+lpmat_occ <- predict(post_gam.fri, newdata=df_pred_occ, se.fit=TRUE, type = "lpmatrix")
+
+df_pred_dly <- data.frame("sind" = unique(right_0.gam.df$sind), "occasional" = 0, "daily" = 1, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = right_0.gam.df$subject_id[1])
+
+lpmat_dly <- predict(post_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "lpmatrix")
+
+
+pred_df_user <- data.frame(seconds = rep(seq(0, 400), 3)/30,
+                      user = c(rep("no use", 401), rep("occasional use", 401),rep("daily use", 401)), 
+                      mean = c(lpmat_non %*% post_gam.coef, 
+                               lpmat_occ %*% post_gam.coef, lpmat_dly %*% post_gam.coef), 
+                      se = c(sqrt(diag(lpmat_non %*% post_gam.cov %*% t(lpmat_non))), 
+                             sqrt(diag(lpmat_occ %*% post_gam.cov %*% t(lpmat_occ))),
+                             sqrt(diag(lpmat_dly %*% post_gam.cov %*% t(lpmat_dly)))), 
+                      stringsAsFactors = F)
+
+post_userProfile <- ggplot(data = pred_df_user, aes(x = seconds, y = mean, group = user, col = user))+
+                    geom_line()+
+                    labs(y = "Percent change in pupil response", 
+                         x = "Seconds from start of light test", 
+                         colour = "Cannabis Use")+
+                    theme_bw()
+post_userProfile
+
+legend_userProfile <- g_legend(post_userProfile)
+```
+
+
+```{r coef_effect_plots}
+pred_f1 <- predict(post_gam.fri, newdata=df_pred_occ, se.fit=TRUE, type = "terms")
+pred_f2 <- predict(post_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "terms")
+
+pred_coef_df <- data.frame(seconds = seq(0, 400)/30,
+                           f0_hat = lpmat_non %*% post_gam.coef, 
+                           f0_se = sqrt(diag(lpmat_non %*% post_gam.cov %*% t(lpmat_non))), 
+                           f1_hat = pred_f1$fit[, 2], 
+                           f1_se = pred_f1$se.fit[, 2], 
+                           f2_hat = pred_f2$fit[, 3], 
+                           f2_se = pred_f2$se.fit[, 3])
+
+pred_coef_df$f1_lci <- pred_coef_df$f1_hat - 2*pred_coef_df$f1_se
+pred_coef_df$f1_uci <- pred_coef_df$f1_hat + 2*pred_coef_df$f1_se
+
+pred_coef_df$f2_lci <- pred_coef_df$f2_hat - 2*pred_coef_df$f2_se
+pred_coef_df$f2_uci <- pred_coef_df$f2_hat + 2*pred_coef_df$f2_se
+
+
+occ_non.sigRegion <- sigRegion(pred_coef_df, crit.val = 0, imp.var = c("seconds", "f1_hat", "f1_lci", "f1_uci"))
+dly_non.sigRegion <- sigRegion(pred_coef_df, crit.val = 0, imp.var = c("seconds", "f2_hat", "f2_lci", "f2_uci"))
+
+
+post_non_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f0_hat))+
+                geom_line()+
+                geom_line(aes(x = seconds, y = f0_hat + 2*f0_se), linetype = "longdash")+
+                geom_line(aes(x = seconds, y = f0_hat - 2*f0_se), linetype = "longdash")+
+                scale_x_continuous(expand = c(0, 0), limits = c(0,10))+
+                scale_y_continuous(limits = c(-7, 7))+
+                labs(title = "Average Percent Change of a Non-user (Post)", ylab = "Percent Change")+
+                theme_bw()
+
+post_occ_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f1_hat))+
+                geom_line()+
+                geom_line(aes(x = seconds, y = f1_hat + 2*f1_se), linetype = "longdash")+
+                geom_line(aes(x = seconds, y = f1_hat - 2*f1_se), linetype = "longdash")+
+                # geom_line(aes(x = seconds, y = 0), col = "darkred")+
+                geom_segment(data=occ_non.sigRegion, aes(x = int.start, y=0, xend= int.end, yend = 0),
+                                color = "darkred", linewidth =1.2)+
+                  
+                labs(title = "Occasional use vs No use", 
+                     y= "", 
+                     x = "")+
+                theme_bw()+
+                scale_x_continuous(expand = c(0, 0), limits = c(0,10), 
+                                   breaks = c(0,2,4,6, 8, 10))+
+                scale_y_continuous(limits = c(-7, 7), breaks = c(-6,-4,-2,0,2,4,6))+
+                theme(rect = element_rect(fill = "transparent"))
+
+post_dly_plt <- ggplot(data = pred_coef_df, aes(x=seconds, y = f2_hat))+
+                geom_line()+
+                geom_line(aes(x = seconds, y = f2_hat + 2*f2_se), linetype = "longdash")+
+                geom_line(aes(x = seconds, y = f2_hat - 2*f2_se), linetype = "longdash")+
+                # geom_line(aes(x = seconds, y = 0), col = "darkred")+
+                geom_segment(data=dly_non.sigRegion, aes(x = int.start, y=0, xend= int.end, yend = 0),
+                                color = "darkred", linewidth =1.2)+
+                labs(title = "Daily use vs No use", 
+                     y = "", 
+                     x = "")+
+                theme_bw()+
+                scale_x_continuous(expand = c(0, 0), limits = c(0,10), 
+                                   breaks = c(0,2,4,6, 8, 10))+
+                scale_y_continuous(limits = c(-7, 7), breaks = c(-6,-4,-2,0,2,4,6))+
+                theme(rect = element_rect(fill = "transparent"))
+
+ylab <- textGrob(label = "Difference in percent change in pupil response", rot = 90, 
+                 gp = gpar(fontsize = 12))
+posval <- textGrob(label = sapply(strwrap("Less Constriction in User", width = 15, simplify = F),
+                                  paste, collapse = "\n"), rot = 0, 
+                 gp = gpar(fontsize = 8))
+negval <- textGrob(label = sapply(strwrap("More Constriction in User", width = 15, simplify = F),
+                                  paste, collapse = "\n"), rot = 0, 
+                 gp = gpar(fontsize = 8))
+
+post_occ_coef <- grid.arrange(ylab, posval, negval, post_occ_plt, 
+                              ncol = 2, nrow = 2, 
+                              layout_matrix = rbind(c(1, 2, rep(4, 15)), c(1, 3, rep(4, 15))))
+
+post_dly_coef <- grid.arrange(ylab, posval, negval, post_dly_plt, 
+                              ncol = 2, nrow = 2, 
+                              layout_matrix = rbind(c(1, 2, rep(4, 15)), c(1, 3, rep(4, 15))))
+```
+
+
+Plot difference between daily and occasional user
+
+```{r diff_dly_occ}
+f2_f1 <- (lpmat_dly - lpmat_occ) %*% post_gam.coef
+f2_f1.se <- sqrt(diag((lpmat_dly - lpmat_occ) %*% post_gam.cov %*% t((lpmat_dly - lpmat_occ))))
+
+f2_f1_diff_df <- data.frame(seconds = seq(0, 400)/30, 
+                            f2f1_diff = f2_f1, 
+                            f2f1_se = f2_f1.se)
+
+post_dlyocc_plt <- ggplot(data = f2_f1_diff_df, aes(x=seconds, y = f2f1_diff))+
+                   geom_line()+
+                   geom_line(aes(x = seconds, y = f2f1_diff + 2*f2f1_se), linetype = "longdash")+
+                   geom_line(aes(x = seconds, y = f2f1_diff - 2*f2f1_se), linetype = "longdash")+
+                   # geom_line(aes(x = seconds, y = 0), col = "darkred")+
+                   labs(title = "Daily use vs Occasional use", 
+                        y = "", 
+                        x = "Seconds from start of light test")+
+                   theme_bw()+
+                   scale_x_continuous(expand = c(0, 0), limits = c(0,10), 
+                                      breaks = c(0,2,4,6, 8, 10))+
+                   scale_y_continuous(limits = c(-7, 7), breaks = c(-6,-4,-2,0,2,4,6))+
+                   theme(rect = element_rect(fill = "transparent"))
+
+ylab <- textGrob(label = "Difference in percent change in pupil response", rot = 90, 
+                 gp = gpar(fontsize = 12))
+posval_do <- textGrob(label = sapply(strwrap("Less Constriction in Daily User", width = 15, 
+                                          simplify = F),
+                                  paste, collapse = "\n"), rot = 0, 
+                 gp = gpar(fontsize = 8))
+negval_do <- textGrob(label = sapply(strwrap("More Constriction in Daily User", width = 15, 
+                                          simplify = F),
+                                  paste, collapse = "\n"), rot = 0, 
+                 gp = gpar(fontsize = 8))
+
+post_dlyocc_coef <- grid.arrange(ylab, posval_do, negval_do, post_dlyocc_plt, 
+                                 ncol = 2, nrow = 2, 
+                                 layout_matrix = rbind(c(1, 2, rep(4, 15)), 
+                                                       c(1, 3, rep(4, 15))))
+
+post_dlyocc_coef
+```
+
+
+Panel Graphic of Differences
+```{r post_diff_plots, fig.height=7}
+g1 <- grid.arrange(posval, negval, post_occ_plt, 
+                                 ncol = 2, nrow = 2, 
+                                 layout_matrix = rbind(c(1, rep(3, 9)), 
+                                                       c(2, rep(3, 9))))
+
+g2 <- grid.arrange(posval, negval, post_dly_plt, 
+                                 ncol = 2, nrow = 2, 
+                                 layout_matrix = rbind(c(1, rep(3, 9)), 
+                                                       c(2, rep(3, 9))))
+
+g3 <- grid.arrange(posval_do, negval_do, post_dlyocc_plt, 
+                                 ncol = 2, nrow = 2, 
+                                 layout_matrix = rbind(c(1, rep(3, 9)), 
+                                                       c(2, rep(3, 9))))
+
+fosr_contrasts <- grid.arrange(ylab, g1, g2, g3,
+             ncol = 2, nrow = 18,
+             layout_matrix = rbind(c(1, rep(2, 15)),
+                                   c(1, rep(2, 15)),
+                                   c(1, rep(2, 15)),
+                                   c(1, rep(2, 15)),
+                                   c(1, rep(2, 15)),
+                                   c(1, rep(3, 15)),
+                                   c(1, rep(3, 15)),
+                                   c(1, rep(3, 15)),
+                                   c(1, rep(3, 15)),
+                                   c(1, rep(3, 15)),
+                                   c(1, rep(4, 15)), 
+                                   c(1, rep(4, 15)),
+                                   c(1, rep(4, 15)), 
+                                   c(1, rep(4, 15)),
+                                   c(1, rep(4, 15))))
+
+fosr_contrasts
+```
+
+### Check for differences between smoker vs non-smoker
+
+```{r smokervnon}
+smoker.gam.df <- merge(right_0.post, pt.analytic.df, 
+                        by = c("subject_id", "user_cat"))
+smoker.gam.df$sind <- smoker.gam.df$frame/400
+smoker.gam.df$smoker <- ifelse(smoker.gam.df$user_cat == "non-user", 0, 1)
+
+m.post_smoker_gam <- mgcv::gam(percent_change ~ s(sind, k=30, bs="cr") + 
+                                 s(sind, by=smoker, k=30, bs = "cr"), 
+                  data = smoker.gam.df, method = "REML")
+
+## Create a matrix of residuals
+post_smoker_gam.resid <- cbind(smoker.gam.df[!(is.na(smoker.gam.df$percent_change)), 
+                                             c("subject_id", "frame")], 
+                               m.post_smoker_gam$residuals)
+names(post_smoker_gam.resid) <- c("subject_id", "frame", "resid")
+
+# post_smoker_gam.resid$frame_char <- str_pad(post_smoker_gam.resid$frame, 
+#                                             width = 3, side = "left", pad = "0")
+
+resid_mat <- reshape(post_smoker_gam.resid[, c("subject_id", "frame", "resid")], 
+                     timevar = "frame", 
+                     idvar = "subject_id", 
+                     direction = "wide")
+
+rownames(resid_mat) <- resid_mat$subject_id
+resid_mat$subject_id <- NULL
+# resid_names <- names(resid_mat)
+# resid_names <- sort(resid_names)
+# resid_mat <- resid_mat[, resid_names]
+
+resid_mat <- as.matrix(resid_mat)
+
+
+post_smoker_gam.fpca <- fpca.face(resid_mat, knots = 15)
+
+#Create data frame of eigen functions and attach to original data
+Phi_mat <- as.data.frame(post_smoker_gam.fpca$efunctions)
+colnames(Phi_mat) <- paste0("Phi", seq(1, post_smoker_gam.fpca$npc))
+Phi_mat$frame <- as.numeric(rownames(Phi_mat)) -1
+
+smoker.gam.df <- merge(smoker.gam.df, Phi_mat, 
+                        by = "frame", 
+                        all.x = T)
+smoker.gam.df <- smoker.gam.df[order(smoker.gam.df$subject_id, smoker.gam.df$frame), ]
+smoker.gam.df$subject_id <- as.factor(smoker.gam.df$subject_id)
+
+post_smoker_gam.fri <- mgcv::bam(percent_change ~ 
+                            s(sind, k=30, bs="cr") + 
+                            s(sind, by=smoker, k=30, bs = "cr") +
+                            s(subject_id, by = Phi1, bs="re") + s(subject_id, by = Phi2, bs="re")+
+                            s(subject_id, by = Phi3, bs="re") + s(subject_id, by = Phi4, bs="re"), 
+                          method = "fREML", data = smoker.gam.df, discrete = TRUE)
+
+
+summary(post_smoker_gam.fri)
+```
+
+Plot difference between smoker and non-smoker
+```{r plot_smk}
+post_smoker_gam.coef <- post_smoker_gam.fri$coefficients
+post_smoker_gam.cov <- vcov.gam(post_smoker_gam.fri)
+
+df_pred_non <- data.frame("sind" = unique(smoker.gam.df$sind), "smoker" =0, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = smoker.gam.df$subject_id[1])
+
+lpmat_non <- predict(post_smoker_gam.fri, newdata=df_pred_non, se.fit=TRUE, type = "lpmatrix")
+
+
+df_pred_smk <- data.frame("sind" = unique(smoker.gam.df$sind), "smoker" = 1, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = smoker.gam.df$subject_id[1])
+
+lpmat_smk <- predict(post_smoker_gam.fri, newdata=df_pred_smk, se.fit=TRUE, type = "lpmatrix")
+
+pred_df_smk <- data.frame(seconds = rep(seq(0, 400), 2)/30,
+                      user = c(rep("no use", 401), rep("cannabis use", 401)), 
+                      mean = c(lpmat_non %*% post_smoker_gam.coef, 
+                               lpmat_smk %*% post_smoker_gam.coef), 
+                      se = c(sqrt(diag(lpmat_non %*% post_smoker_gam.cov %*% t(lpmat_non))), 
+                             sqrt(diag(lpmat_smk %*% post_smoker_gam.cov %*% t(lpmat_smk)))), 
+                      stringsAsFactors = F)
+
+post_smkProfile <- ggplot(data = pred_df_smk, aes(x = seconds, y = mean, group = user, col = user))+
+                   geom_line()+
+                   scale_y_continuous(limits = c(min(pred_df_smk$mean - 2*pred_df_smk$se),
+                                                 max(pred_df_smk$mean+2*pred_df_smk$se)))+
+                   labs(y = "Percent Change")+
+                   theme_bw()
+post_smkProfile
+
+legend_smkProfile <- g_legend(post_smkProfile)
+```
+
+Manuscript plot of mean trajectories for smokers and all user categories
+```{r plot_smk_user_mean}
+user_col <- viridis(15)
+
+post_allProfile <- ggplot(data = pred_df_user, aes(x = seconds, y = mean, group = user, col = as.factor(user)))+
+                   geom_line()+
+                   geom_line(data = pred_df_smk[pred_df_smk$user == "cannabis use", ],
+                             aes(x = seconds, y = mean),
+                             linetype = "longdash", col = user_col[12])+
+                   scale_color_manual(values = c(user_col[c(2, 13, 11)]), 
+                                      breaks = c("no use", "occasional use", "daily use"))+
+                   scale_x_continuous(expand = c(0,0), limits = c(0, 10), 
+                                      breaks = c(0,2,4,6, 8, 10))+
+                   labs(y = "Percent change in pupil response", 
+                        x = "Seconds from start of light test", 
+                        colour = "")+
+                   theme_bw()+
+                   theme(legend.position = c(0.85,0.8), 
+                         legend.text = element_text(size = 12))
+
+post_allProfile
+```
+
+### Manuscript Figure
+
+```{r fosr_model_plots, fig.height=8, fig.width=15, dev='jpeg'}
+final.fosr <- grid.arrange(post_allProfile, post_occ_coef, 
+                           post_dly_coef, post_dlyocc_coef, 
+                          layout_matrix = rbind(c(1,2),
+                                                c(3,4)))
+
+labeled.fosr.plot <- as_ggplot(final.fosr) +
+                    draw_plot_label(label = c("A", "B", "C", "D"), size = 15, 
+                                    x = c(0, 0.5, 0, 0.5), y = c(1, 1, 0.5, 0.5))
+
+labeled.fosr.plot
+
+```
+
+
+## Effect of Post Consumption time to test (PCTT) on trajectories of pupillary light reflex
+
+```{r distPCTT}
+pctt_hist <- ggplot(data= pt.analytic.df[pt.analytic.df$user_cat != "non-user", ], 
+                    aes(x = postConsumpTimeToTest))+
+              geom_histogram(binwidth = 1, fill = "darkgrey")+
+              geom_vline(xintercept = mean(pt.analytic.df$postConsumpTimeToTest[pt.analytic.df$user != "non-user"], na.rm = T),
+                         col = "darkred", linetype = "longdash")+
+              scale_y_continuous(expand = c(0,0))+
+              scale_x_continuous(breaks = c(53, 60, 65, 70, 77, 84))+
+  labs(x= "Time delay from consumption to test (mins)", 
+       y = "")+
+  theme_bw()
+pctt_hist
+```
+
+### FoSR Post -- Interaction with Post Consumption Time to Test (PCTT)
+$$ 
+\begin{aligned}
+Y_{i}(t) &= f_0(t) + f_1(t)*I(user = occasional) + f_2(t)*I(user = daily) +f_3(t)*I(user = occasional)*PCTT + f_4(t)*I(user = daily)*PCTT + b_i(t) + \epsilon_i(t)\\
+& b_i(t) \sim GP(0, \Sigma_b) \\
+& \epsilon_i(t) \sim N(0, \sigma_{\epsilon}^2) \\
+&= \sum_{k=1}^K \xi_{0k}\phi_{0k}(t_i) + \sum_{k=1}^K \xi_{1k}\phi_{1k}(t_i)*I(user = occasional) + \sum_{k=1}^K \xi_{2k}\phi_{2k}(t_i)*I(user = daily)\\ &+ \sum_{k=1}^K \xi_{3k}\phi_{3k}(t_i)*I(user = occasional)*PCTT + \sum_{k=1}^K \xi_{4k}\phi_{4k}(t_i)*I(user = daily)*PCTT + \sum_{k=1}^K \xi_{ik}\phi_k(t_i) + \epsilon_i(t)\\
+\end{aligned}
+$$
+
+
+```{r post_gam_intPCTT}
+pt.analytic.df$postConsumpTimeToTest_c <- pt.analytic.df$postConsumpTimeToTest- round(mean(pt.analytic.df$postConsumpTimeToTest[pt.analytic.df$user_cat != "non-user"], na.rm = T), 3)
+
+summary(pt.analytic.df$postConsumpTimeToTest_c)
+by(data = pt.analytic.df$postConsumpTimeToTest_c, INDICES = pt.analytic.df$user_cat, FUN = summary)
+
+pt.analytic.df$occ_PCTT <- pt.analytic.df$occasional*pt.analytic.df$postConsumpTimeToTest_c
+pt.analytic.df$dly_PCTT <- pt.analytic.df$daily*pt.analytic.df$postConsumpTimeToTest_c
+pt.analytic.df$occ_PCTT[pt.analytic.df$user == "non-user"] <- 0
+pt.analytic.df$dly_PCTT[pt.analytic.df$user == "non-user"] <- 0
+
+post_intPCTT.gam.df <- merge(right_0.post, pt.analytic.df,
+                             by = c("subject_id", "user_cat"))
+
+# right_0.gam.df <- right_0.gam.df[order(right_0.gam.df$subject_id, right_0.gam.df$frame), ]
+post_intPCTT.gam.df$sind <- post_intPCTT.gam.df$frame/400
+
+# head(right_0.gam.df)
+
+m.post_intPCTT_gam <- mgcv::bam(percent_change ~ s(sind, k=30, bs="cr") +
+                                  s(sind, by=occasional, k=30, bs = "cr") +
+                                  s(sind, by=daily, k=30, bs = "cr") +
+                                  s(sind, by=occ_PCTT, k=30, bs = "cr") + 
+                                  s(sind, by=dly_PCTT, k=30, bs = "cr"), 
+                                data = post_intPCTT.gam.df, method = "REML")
+summary(m.post_intPCTT_gam)
+## Create a matrix of residuals
+post_intPCTT_gam.resid <- cbind(post_intPCTT.gam.df[!(is.na(post_intPCTT.gam.df$percent_change)), 
+                                       c("subject_id", "frame")],
+                                m.post_intPCTT_gam$residuals)
+names(post_intPCTT_gam.resid) <- c("subject_id", "frame", "resid")
+# post_gam.resid$frame_char <- str_pad(post_gam.resid$frame, width = 3, side = "left", pad = "0")
+
+resid_mat <- reshape(post_intPCTT_gam.resid[, c("subject_id", "frame", "resid")], 
+                     timevar = "frame", 
+                     idvar = "subject_id", 
+                     direction = "wide")
+rownames(resid_mat) <- resid_mat$subject_id
+resid_mat$subject_id <- NULL
+# resid_names <- names(resid_mat)
+# resid_names <- sort(resid_names)
+# resid_mat <- resid_mat[, resid_names]
+
+resid_mat <- as.matrix(resid_mat)
+
+post_intPCTT_gam.fpca <- fpca.face(resid_mat, knots = 15)
+
+#Create data frame of eigen functions and attach to original data
+Phi_mat <- as.data.frame(post_gam.fpca$efunctions)
+colnames(Phi_mat) <- paste0("Phi", seq(1, post_gam.fpca$npc))
+Phi_mat$frame <- as.numeric(rownames(Phi_mat)) -1
+
+post_intPCTT.gam.df <- merge(post_intPCTT.gam.df, Phi_mat, 
+                        by = "frame", 
+                        all.x = T)
+post_intPCTT.gam.df <- post_intPCTT.gam.df[order(post_intPCTT.gam.df$subject_id, post_intPCTT.gam.df$frame), ]
+post_intPCTT.gam.df$subject_id <- as.factor(post_intPCTT.gam.df$subject_id)
+
+post_intPCTT_gam.fri <- mgcv::bam(percent_change ~ 
+                            s(sind, k=30, bs="cr") +
+                            s(sind, by=occasional, k=30, bs = "cr") +
+                            s(sind, by=daily, k=30, bs = "cr") +
+                            s(sind, by=occ_PCTT, k=30, bs = "cr") + 
+                            s(sind, by=dly_PCTT, k=30, bs = "cr")+
+                            s(subject_id, by = Phi1, bs="re") + s(subject_id, by = Phi2, bs="re")+
+                            s(subject_id, by = Phi3, bs="re") + s(subject_id, by = Phi4, bs="re"), 
+                          method = "fREML", data = post_intPCTT.gam.df, discrete = TRUE)
+
+
+summary(post_intPCTT_gam.fri)
+```
+
+```{r post_gam_intPCTT_smokers}
+pt.analytic.df$smoker <- ifelse(pt.analytic.df$user_cat == "non-user", 0, 1)
+
+pt.analytic.df$smoke_PCTT <- pt.analytic.df$smoker*pt.analytic.df$postConsumpTimeToTest_c
+pt.analytic.df$smoke_PCTT[pt.analytic.df$user == "non-user"] <- 0
+
+
+by(data = pt.analytic.df$postConsumpTimeToTest_c, INDICES = pt.analytic.df$smoker, FUN = summary)
+
+
+post_intPCTT_smoke.gam.df <- merge(right_0.post, pt.analytic.df,
+                             by = c("subject_id", "user_cat", "eye"))
+
+# right_0.gam.df <- right_0.gam.df[order(right_0.gam.df$subject_id, right_0.gam.df$frame), ]
+post_intPCTT_smoke.gam.df$sind <- post_intPCTT_smoke.gam.df$frame/400
+
+# head(right_0.gam.df)
+
+m.post_intPCTT_smoke_gam <- mgcv::bam(percent_change ~ s(sind, k=30, bs="cr") +
+                                  s(sind, by=smoker, k=30, bs = "cr") +
+                                  s(sind, by=smoke_PCTT, k=30, bs = "cr"), 
+                                data = post_intPCTT_smoke.gam.df, method = "REML")
+summary(m.post_intPCTT_smoke_gam)
+
+## Create a matrix of residuals
+post_intPCTT_smoke_gam.resid <- cbind(post_intPCTT_smoke.gam.df[!(is.na(post_intPCTT_smoke.gam.df$percent_change)), 
+                                       c("subject_id", "frame")],
+                                m.post_intPCTT_smoke_gam$residuals)
+names(post_intPCTT_smoke_gam.resid) <- c("subject_id", "frame", "resid")
+# post_gam.resid$frame_char <- str_pad(post_gam.resid$frame, width = 3, side = "left", pad = "0")
+
+resid_mat <- reshape(post_intPCTT_smoke_gam.resid[, c("subject_id", "frame", "resid")], 
+                     timevar = "frame", 
+                     idvar = "subject_id", 
+                     direction = "wide")
+rownames(resid_mat) <- resid_mat$subject_id
+resid_mat$subject_id <- NULL
+# resid_names <- names(resid_mat)
+# resid_names <- sort(resid_names)
+# resid_mat <- resid_mat[, resid_names]
+
+resid_mat <- as.matrix(resid_mat)
+
+post_intPCTT_smoke_gam.fpca <- fpca.face(resid_mat, knots = 15)
+
+#Create data frame of eigen functions and attach to original data
+Phi_mat <- as.data.frame(post_intPCTT_smoke_gam.fpca$efunctions)
+colnames(Phi_mat) <- paste0("Phi", seq(1, post_intPCTT_smoke_gam.fpca$npc))
+Phi_mat$frame <- as.numeric(rownames(Phi_mat)) -1
+
+post_intPCTT_smoke.gam.df <- merge(post_intPCTT_smoke.gam.df, Phi_mat, 
+                        by = "frame", 
+                        all.x = T)
+
+post_intPCTT_smoke.gam.df <- post_intPCTT_smoke.gam.df[order(post_intPCTT_smoke.gam.df$subject_id,
+                                                             post_intPCTT_smoke.gam.df$frame), ]
+post_intPCTT_smoke.gam.df$subject_id <- as.factor(post_intPCTT_smoke.gam.df$subject_id)
+
+post_intPCTT_smoke.gam.fri <- mgcv::bam(percent_change ~ 
+                            s(sind, k=30, bs="cr") +
+                            s(sind, by=smoker, k=30, bs = "cr") +
+                            s(sind, by=smoke_PCTT, k=30, bs = "cr") +
+                            s(subject_id, by = Phi1, bs="re") + s(subject_id, by = Phi2, bs="re")+
+                            s(subject_id, by = Phi3, bs="re") + s(subject_id, by = Phi4, bs="re"), 
+                          method = "fREML", data = post_intPCTT_smoke.gam.df, discrete = TRUE)
+
+
+summary(post_intPCTT_smoke.gam.fri)
+```
+
+## Trajectories for smokers with different PCTT and non-smokers 
+```{r post_smoke_PCTT_traj}
+# create plot categories based on the 25th, 50th and 75th percentile
+plot_cat <- c(60, 65, 70) - round(mean(pt.analytic.df$postConsumpTimeToTest, na.rm = T), 3) 
+
+post_intPCTT_smoke_gam.coef <- post_intPCTT_smoke.gam.fri$coefficients
+post_intPCTT_smoke_gam.cov <- vcov.gam(post_intPCTT_smoke.gam.fri)
+
+### -- Non-smoker
+df_pred_non <- data.frame("sind" = unique(post_intPCTT_smoke.gam.df$sind), 
+                          "smoker" = 0, 
+                          "smoke_PCTT" = 0, 
+                          "dly_PCTT" = 0,
+                          "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, "Phi4" = 0, 
+                          "subject_id" = post_intPCTT_smoke.gam.df$subject_id[1])
+
+lpmat_non <- predict(post_intPCTT_smoke.gam.fri, newdata=df_pred_non, se.fit=TRUE, type = "lpmatrix")
+
+### -- Smoker with median PCTT
+df_pred_smoke50 <- data.frame("sind" = unique(post_intPCTT_smoke.gam.df$sind), 
+                          "smoker" = 1, 
+                          "smoke_PCTT" = plot_cat[2], 
+                          "dly_PCTT" = 0,
+                          "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, "Phi4" = 0, 
+                          "subject_id" = post_intPCTT_smoke.gam.df$subject_id[1])
+
+lpmat_smoke50 <- predict(post_intPCTT_smoke.gam.fri, newdata=df_pred_smoke50, se.fit=TRUE, type = "lpmatrix")
+
+### -- Smoker with 25th%-ile PCTT
+df_pred_smoke25 <- data.frame("sind" = unique(post_intPCTT_smoke.gam.df$sind), 
+                          "smoker" = 1, 
+                          "smoke_PCTT" = plot_cat[1], 
+                          "dly_PCTT" = 0,
+                          "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, "Phi4" = 0, 
+                          "subject_id" = post_intPCTT_smoke.gam.df$subject_id[1])
+
+lpmat_smoke25 <- predict(post_intPCTT_smoke.gam.fri, newdata=df_pred_smoke25, se.fit=TRUE, type = "lpmatrix")
+
+
+### -- Smoker with 75th%-ile PCTT
+df_pred_smoke75 <- data.frame("sind" = unique(post_intPCTT_smoke.gam.df$sind), 
+                          "smoker" = 1, 
+                          "smoke_PCTT" = plot_cat[3], 
+                          "dly_PCTT" = 0,
+                          "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, "Phi4" = 0, 
+                          "subject_id" = post_intPCTT_smoke.gam.df$subject_id[1])
+
+lpmat_smoke75 <- predict(post_intPCTT_smoke.gam.fri, newdata=df_pred_smoke75, se.fit=TRUE, type = "lpmatrix")
+
+
+pred_df <- data.frame(seconds = rep(seq(0, 400), 4)/30,
+                      user = c(rep("No use", 401), 
+                               rep("Cannabis use (60 min)", 401), 
+                               rep("Cannabis use (65 min)", 401),
+                               rep("Cannabis use (70 min)", 401)
+                               ), 
+                      mean = c(lpmat_non %*% post_intPCTT_smoke_gam.coef, 
+                               lpmat_smoke25 %*% post_intPCTT_smoke_gam.coef,
+                               lpmat_smoke50 %*% post_intPCTT_smoke_gam.coef, 
+                               lpmat_smoke75 %*% post_intPCTT_smoke_gam.coef
+                               ), 
+                      se = c(sqrt(diag(lpmat_non %*% post_intPCTT_smoke_gam.cov %*% t(lpmat_non))), 
+                             sqrt(diag(lpmat_smoke25 %*% post_intPCTT_smoke_gam.cov %*% t(lpmat_smoke25))),
+                             sqrt(diag(lpmat_smoke50 %*% post_intPCTT_smoke_gam.cov %*% t(lpmat_smoke50))),                              sqrt(diag(lpmat_smoke75 %*% post_intPCTT_smoke_gam.cov %*% t(lpmat_smoke75)))
+                             ), 
+                      stringsAsFactors = F)
+
+post_smokerProfile <- ggplot(data = pred_df, aes(x = seconds, y = mean, group = user, col = user))+
+                    geom_line(linewidth = 1.001)+
+                    labs(y = "Percent change in pupil response", 
+                         x = "Seconds from start of light test", 
+                         col = "")+
+                    scale_x_continuous(expand = c(0, 0), limits = c(0,10), 
+                                       breaks = c(0,2,4,6,8, 10))+
+                    scale_color_manual(values = c(user_col[c(2, 9, 11, 13, 15)]), 
+                                      breaks = c("No use", "Cannabis use (60 min)",
+                                                 "Cannabis use (65 min)", "Cannabis use (70 min)"))+
+                    theme_bw()+
+                    theme(legend.position = c(0.6,0.8))
+
+post_smokerProfile
+```
+
+```{r PCTT_hist_response, fig.height= 4, fig.width=8, warning=FALSE, dev='jpeg'}
+
+final.pctt <- grid.arrange(pctt_hist, post_smokerProfile, 
+                          layout_matrix = cbind(1,2))
+
+labeled.pctt.plot <- as_ggplot(final.pctt) +
+                    draw_plot_label(label = c("A", "B"), size = 15, 
+                                    x = c(0, 0.5), y = c(1, 1))
+
+labeled.pctt.plot
+```

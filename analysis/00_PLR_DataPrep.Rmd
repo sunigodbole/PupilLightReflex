@@ -1,0 +1,452 @@
+---
+title: "00_PLR_DataPrep"
+author: "Suni Godbole"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: lumen
+---
+
+```{r setup, include=FALSE}
+library(openxlsx)
+library(ggplot2)
+library(refund)
+library(refund.shiny)
+library(pROC)
+library(stringr)
+library(PerformanceAnalytics)
+library(mgcv)
+library(grid)
+library(gridExtra)
+library(haven)
+library(Hmisc)
+library(ggpmisc)
+library(viridis)
+library(gtsummary)
+library(cowplot)
+library(ggpubr)
+library(plotROC)
+library(ggrepel)
+
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE,
+  dpi = 500,
+  fig.width = 9,
+  fig.height = 4,
+  fig.path = '../figs/'
+)
+
+theme_set(theme_bw() + theme(legend.position = "bottom"))
+
+# ps_folder <- "C:/Repositories/Dissertation/PupilSize_img"
+data_folder <- "C:/Users/Suneeta/OneDrive - The University of Colorado Denver/FDA/Data" # Home laptop
+# data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data" # Work laptop
+# data_folder <- "C:/Users/godbolsu/OneDrive - The University of Colorado Denver/FDA/Data"
+ps_folder <- "202208_PupilLightReflex"
+
+res_folder <- "C:/Repository/FDA/PupilLightReflex/analysis" # Work Laptop
+# res_folder <- "C:/Repositories/FDA/PupilLightReflex/analysis" # Home Laptop
+```
+
+# Data Preparation
+```{r dataReadIn}
+ps <- read.csv(here::here("..", "onedrive", "FDA", "Data", "202208_PupilLightReflex", "pupil_data_with_demo_20220926.csv"))
+
+ps$demo_gender <- factor(ps$demo_gender, 
+                         levels = c(1,2), 
+                         labels = c("Male", "Female"))
+
+ps$user_cat <- NA
+ps$user_cat[ps$user_type == "non-user"] <- 0
+ps$user_cat[ps$user_type == "occasional"] <- 1
+ps$user_cat[ps$user_type == "daily"] <- 2
+
+ps$user_cat <- factor(ps$user_cat, 
+                      levels = c(0,1,2), 
+                      labels = c("non-user", 
+                                 "occasional", 
+                                 "daily"))
+
+ps$tp <- NA
+ps$tp[ps$time == "pre2"] <- 0
+ps$tp[ps$time == "post"] <- 1
+
+ps$tp <- factor(ps$tp, 
+                levels = c(0,1), 
+                labels = c("pre2", "post"))
+```
+
+```{r pt_summ}
+# subject level data 
+pt.df <- unique(ps[, c("subject_id", "tp", "user_cat", "demo_age", 
+                "demo_weight", "demo_height", "demo_gender", "thc")])
+
+```
+
+There are more subjects in total than by time point. Indicating incomplete data with some subjects missing "pre" and others missing "post" measurement.
+
+Add scalar features for each participant-time point
+```{r scalarFeat}
+scalar.feat <- read.csv(here::here("..", "onedrive", "FDA", "Data",
+                                   "202208_PupilLightReflex", "scalars_trim.csv"), 
+                        header = T, stringsAsFactors = F)
+
+scalar.feat$subject_id <- substr(scalar.feat$timeid, 1, 7)
+scalar.feat$tp <- substr(scalar.feat$timeid, 8, 11)
+
+scalar.featR <- scalar.feat[scalar.feat$eye == "Right", ]
+
+pt.df <- merge(pt.df, scalar.featR[, c("subject_id", "tp", "min_constriction", 
+                                       "duration", "avg_end_percent", "slope", 
+                                       "AUC", "eye")], 
+               by = c("subject_id", "tp"))
+
+```
+
+Reshape participant demog data to preserve pre and post THC levels and scalar features
+```{r ptdf_reshape}
+pt.df.w <- reshape(pt.df, 
+                   timevar = "tp", 
+                   idvar = c("subject_id", "user_cat", "demo_age", 
+                             "demo_weight", "demo_height", "demo_gender", "eye"), 
+                   direction = "wide")
+pt.df.w$thc.post[pt.df.w$user_cat == "non-user" & is.na(pt.df.w$thc.post)] <- 0
+pt.df.w$thc_chg <- pt.df.w$thc.post - pt.df.w$thc.pre2
+pt.df.w$BMI <- pt.df.w$demo_weight*703/(pt.df.w$demo_height)^2
+pt.df.w$min_constriction_chg <- pt.df.w$min_constriction.post - pt.df.w$min_constriction.pre2
+pt.df.w$AUC_chg <- pt.df.w$AUC.post - pt.df.w$AUC.pre2
+pt.df.w$duration_chg <- pt.df.w$duration.post - pt.df.w$duration.pre2
+pt.df.w$avg_end_percent_chg <- pt.df.w$avg_end_percent.post - pt.df.w$avg_end_percent.pre2
+pt.df.w$slope_chg <-  pt.df.w$slope.post - pt.df.w$slope.pre2
+```
+
+## Add time from smoking to post test
+```{r readIn_testTimes}
+## Need to work on; time formatted in Excel file.
+testTimes <- read.xlsx(here::here("..", "onedrive", "FDA", "Data",
+                                  "202208_PupilLightReflex", 
+                                  "All SafetyScan Times_23Aug2022_revSG.xlsx"), 
+                       sheet = "Raw")
+
+testTimes$pre_safetyscan_date_convert <- as.Date(testTimes$pre_safetyscan_date, 
+                                                 origin = "1899-12-30")
+
+testTimes$pre_safetyscan_time_convert <- as.POSIXct(paste0(testTimes$pre_safetyscan_date_convert,
+                                                           " ", testTimes$pre_safetyscan_time_hr,
+                                                           ":", testTimes$pre_safetyscan_time_min,
+                                                           ":", "00"), 
+                                                    format = "%Y-%m-%d %H:%M:%S")
+
+testTimes$consump_start_time_convert <- as.POSIXct(paste0(testTimes$pre_safetyscan_date_convert,
+                                                          " ", testTimes$consump_start_time_hr, 
+                                                          ":", testTimes$consump_start_time_min,
+                                                          ":", "00"), 
+                                                   format = "%Y-%m-%d %H:%M:%S")
+
+testTimes$consump_end_time_convert <- as.POSIXct(paste0(testTimes$pre_safetyscan_date_convert,
+                                                        " ", testTimes$consump_end_time_hr, 
+                                                        ":", testTimes$consump_end_time_min, 
+                                                        ":", "00"), 
+                                                 format = "%Y-%m-%d %H:%M:%S")
+
+testTimes$post_safetyscan_time_convert <- as.POSIXct(paste0(testTimes$pre_safetyscan_date_convert,
+                                                            " ", testTimes$post_safetyscan_time_hr,
+                                                            ":", testTimes$post_safetyscan_time_min,
+                                                            ":", "00"), 
+                                                     format = "%Y-%m-%d %H:%M:%S")
+
+testTimes$postConsumpTimeToTest <- as.numeric(difftime(testTimes$post_safetyscan_time_convert,
+                                                       testTimes$consump_end_time_convert,
+                                                       units = "mins"))
+
+testTimes$Post_PreTime <- as.numeric(difftime(testTimes$post_safetyscan_time_convert,
+                                              testTimes$pre_safetyscan_time_convert,
+                                              units = "mins"))
+
+testTimes$remove <- ifelse(testTimes$subject_id == "001-056" & is.na(testTimes$postConsumpTimeToTest), 1, 0)
+testTimes <- testTimes[testTimes$remove == 0, ]
+
+# ## For subjects without a post Consumption to test time, we're using the time between pre and post test -- DO NOT "impute" this way -- JW 11/11/2022
+# testTimes$postConsumpTimeToTest[is.na(testTimes$postConsumpTimeToTest)] <- testTimes$Post_PreTime[is.na(testTimes$postConsumpTimeToTest)]
+
+pt.df <- merge(pt.df.w, testTimes[, c("subject_id", "postConsumpTimeToTest", "Post_PreTime")], 
+               by = "subject_id")
+
+ps <- merge(ps, testTimes[, c("subject_id", "postConsumpTimeToTest", "Post_PreTime")], 
+               by = "subject_id")
+
+non_user.id <- pt.df$subject_id[pt.df$user_cat == "non-user"]
+```
+
+```{r vasReadIn2}
+vs <- read.xlsx(here::here("..", "onedrive", "FDA", "Data", "202208_PupilLightReflex",
+                           "All CDPHE VAS Scores_30Nov2022.xlsx"), 
+                sheet = "VAS")
+### Data Dictionary
+# "subject_id"
+# "vas0_high_score" -- vas score for how high you feel at pre
+# "vas0_score_dc" -- how confident you feel about driving at pre
+# "vas1_high_score" -- vas score for how high you feel at post
+# "vas1_score_dc" -- how confident you feel about driving at post
+
+pt.df <- merge (pt.df, vs, 
+                by = "subject_id", 
+                all.x = T)
+pt.df$vas_high_score_chg <- pt.df$vas1_high_score - pt.df$vas0_high_score
+pt.df$vas_score_dc_chg <- pt.df$vas1_score_dc - pt.df$vas0_score_dc
+```
+
+Remove Outliers
+```{r outliers}
+## Remove known outliers
+ps$outliers <- 0
+# ps$outliers[ps$subject_id == "001-109" & ps$tp == "pre2"] <- 1 # Ben revised
+ps$outliers[ps$subject_id == "001-060" & ps$tp == "post"] <- 1
+
+ps <- ps[ps$outliers == 0, ]
+```
+
+Plot of PRE/POST for Right Eye
+```{r rightEye_plots, eval=FALSE}
+right.df <- ps[ps$eye == "Right", ]
+
+ggplot(right.df, aes(x=frame/30, y = percent_change, group = subject_id))+
+  geom_line(show.legend = FALSE, alpha = 0.5)+
+  facet_grid(rows = vars(user_cat), cols = vars(tp))+
+  labs(title = "Percent Change by Pre/Post and THC use category", 
+       x = "seconds")+
+  theme_bw()
+```
+
+## Create Analytic Sample
+Make sure datasets have the same participants and are truncated at frame 400
+
+```{r interpolateMissing}
+ps <- ps[ps$frame >= 0 & ps$frame <= 400, 
+         c("subject_id", "tp", "eye", "frame", "percent_change")]
+
+ps <- ps[order(ps$subject_id, ps$tp, ps$eye, ps$frame), ]
+ps$frame_char <- str_pad(ps$frame, width = 3, side = c("left"), pad = "0")
+ps$frame <- NULL
+
+ps.w <- reshape(ps[, c("subject_id","tp", "eye", "frame_char", "percent_change")], 
+                          timevar = "frame_char", 
+                          idvar = c("subject_id", "tp", "eye"), 
+                          direction = "wide")
+var.names <-  c(names(ps.w)[1:3], sort(names(ps.w)[4:404]))
+
+ps.w <- ps.w[, var.names]
+
+id.names <- paste(ps.w$subject_id, ps.w$tp, ps.w$eye, sep = "_")
+rownames(ps.w) <- id.names
+
+missData <- apply(ps.w[, 4:404], MARGIN = 1, FUN = function(x) sum(is.na(x)))
+
+missInterpolate <- function(x){
+  z <- zoo(x, order.by = seq(0:400))
+  y <- na.approx(z, maxgap = 3, na.rm = FALSE)
+  
+  return(as.numeric(y))
+}
+
+test <- apply(ps.w[, 4:404], 
+              MARGIN = 1, 
+              FUN = missInterpolate)
+
+ps.w <- data.frame(t(test))
+
+names(ps.w) <- var.names[4:404]
+
+ps.w$subject_id <- substr(rownames(ps.w), 1, 7)
+ps.w$tp <- ifelse(grepl("pre2", rownames(ps.w)) == T, "pre2", "post")
+ps.w$eye <- ifelse(grepl("Left", rownames(ps.w)) == T, "Left", "Right")
+
+ps.w <- ps.w[, var.names]
+
+pctChg.names <- var.names[4:404]
+
+ps <- reshape(ps.w,
+              varying = pctChg.names, 
+              v.names = "percent_change",
+              timevar = "frame", 
+              times = 0:400,
+              idvar = c("subject_id", "tp", "eye"),
+              direction = "long")
+
+ps <- ps[order(ps$subject_id, ps$tp, ps$eye), ]
+```
+
+
+```{r analyticN}
+right_0.post <- ps[ps$tp == "post" & ps$eye == "Right", ]
+post.ids <- unique(right_0.post$subject_id)
+
+right_0.post.w <- ps.w[ps.w$tp == "post" & ps.w$eye == "Right", ]
+
+right_0.pt <- reshape(ps[ps$eye == "Right", ], 
+                      timevar = "tp", 
+                      idvar = c("subject_id", "frame"), 
+                      direction = "wide")
+
+right_0.pt$wiPctChg <- right_0.pt$percent_change.post - right_0.pt$percent_change.pre2
+
+right_0.pt <- right_0.pt[, c("subject_id", "frame", "wiPctChg")]
+
+right_0.pt.w <- reshape(right_0.pt[, c("subject_id", "frame", "wiPctChg")], 
+                     timevar = "frame", 
+                     idvar = "subject_id", 
+                     direction = "wide")
+
+# remove rows where all data is missing (e.g. pt didn't have both pre and post)
+allMissing <- rowSums(is.na(right_0.pt.w[, 2:402]))
+rowsAllMissing <- names(allMissing)[allMissing == 401]
+
+right_0.pt.w <- right_0.pt.w[!(rownames(right_0.pt.w) %in% rowsAllMissing), ]
+
+################################# ----------------------------- Left eye
+left_0.post <- ps[ps$tp == "post" & ps$eye == "Left", ]
+left.post.ids <- unique(left_0.post$subject_id)
+
+left_0.post.w <- ps.w[ps.w$tp == "post" & ps.w$eye == "Left", ]
+
+left_0.pt <- reshape(ps[ps$eye == "Left", ], 
+                      timevar = "tp", 
+                      idvar = c("subject_id", "frame"), 
+                      direction = "wide")
+
+left_0.pt$wiPctChg <- left_0.pt$percent_change.post - left_0.pt$percent_change.pre2
+
+left_0.pt <- left_0.pt[, c("subject_id", "frame", "wiPctChg")]
+
+left_0.pt.w <- reshape(left_0.pt[, c("subject_id", "frame", "wiPctChg")], 
+                     timevar = "frame", 
+                     idvar = "subject_id", 
+                     direction = "wide")
+
+# remove rows where all data is missing (e.g. pt didn't have both pre and post)
+allMissing <- rowSums(is.na(left_0.pt.w[, 2:402]))
+rowsAllMissing <- names(allMissing)[allMissing == 401]
+
+left_0.pt.w <- left_0.pt.w[!(rownames(left_0.pt.w) %in% rowsAllMissing), ]
+
+## Find intersection of all participant files across data sets to define the analytic subjects
+
+analytic.N <- intersect(unique(right_0.post$subject_id), unique(right_0.pt$subject_id))
+analytic.N <- intersect(analytic.N, unique(right_0.post.w$subject_id))
+analytic.N <- intersect(analytic.N, unique(right_0.pt.w$subject_id))
+
+analytic_L.N <- intersect(unique(left_0.post.w$subject_id), unique(left_0.post$subject_id))
+analytic_L.N <- intersect(analytic.N, unique(left_0.pt$subject_id))
+analytic_L.N <- intersect(analytic.N, unique(left_0.pt.w$subject_id))
+
+analytic_LR.N <- intersect(analytic.N, analytic_L.N)
+
+## Filter all datasets to analytic sample
+
+left_0.post <- left_0.post[left_0.post$subject_id %in% analytic_LR.N, ]
+left_0.post$seconds <- left_0.post$frame/30
+left_0.post.w <- left_0.post.w[left_0.post.w$subject_id %in% analytic_LR.N ,]
+row.names(left_0.post.w) <- left_0.post.w$subject_id
+
+left_0.post <- merge(left_0.post, pt.df[, c("subject_id", "user_cat")], 
+                     by = "subject_id", 
+                     all.x = T)
+left_0.post.w <- merge(left_0.post.w, pt.df[, c("subject_id", "user_cat")], 
+                     by = "subject_id", 
+                     all.x = T)
+
+rownames(left_0.post.w) <- left_0.post.w$subject_id
+
+left_0.pt <- left_0.pt[left_0.pt$subject_id %in% analytic_LR.N, ]
+left_0.pt$seconds <- left_0.pt$frame/30
+left_0.pt.w <- left_0.pt.w[left_0.pt.w$subject_id %in% analytic_LR.N, ]
+row.names(left_0.pt.w) <- left_0.pt.w$subject_id
+
+left_0.pt <- merge(left_0.pt, pt.df[, c("subject_id", "user_cat")], 
+                     by = "subject_id", 
+                     all.x = T)
+left_0.pt.w <- merge(left_0.pt.w, pt.df[, c("subject_id", "user_cat")], 
+                     by = "subject_id", 
+                     all.x = T)
+
+rownames(left_0.pt.w) <- left_0.pt.w$subject_id
+
+## Filter all datasets to analytic sample
+right_0.post <- right_0.post[right_0.post$subject_id %in% analytic.N, ]
+right_0.post$seconds <- right_0.post$frame/30
+right_0.post.w <- right_0.post.w[right_0.post.w$subject_id %in% analytic.N ,]
+row.names(right_0.post.w) <- right_0.post.w$subject_id
+
+right_0.post <- merge(right_0.post, pt.df[, c("subject_id", "user_cat")], 
+                     by = "subject_id", 
+                     all.x = T)
+right_0.post.w <- merge(right_0.post.w, pt.df[, c("subject_id", "user_cat")], 
+                     by = "subject_id", 
+                     all.x = T)
+
+rownames(right_0.post.w) <- right_0.post.w$subject_id
+
+right_0.pt <- right_0.pt[right_0.pt$subject_id %in% analytic.N, ]
+right_0.pt$seconds <- right_0.pt$frame/30
+right_0.pt.w <- right_0.pt.w[right_0.pt.w$subject_id %in% analytic.N, ]
+
+right_0.pt <- merge(right_0.pt, pt.df[, c("subject_id", "user_cat")], 
+                     by = "subject_id", 
+                     all.x = T)
+right_0.pt.w <- merge(right_0.pt.w, pt.df[, c("subject_id", "user_cat")], 
+                     by = "subject_id", 
+                     all.x = T)
+
+rownames(right_0.pt.w) <- right_0.pt.w$subject_id
+
+pt.analytic.df <- pt.df[pt.df$subject_id %in% analytic.N,]
+
+post.right.ids <- unique(ps$subject_id[ps$tp == "post" & ps$eye == "Right"])
+pre.right.ids <- unique(ps$subject_id[ps$tp == "pre2" & ps$eye == "Right"])
+
+post.exclude.ids <- post.right.ids[!(post.right.ids %in% pre.right.ids)]
+
+```
+
+Write Analytic files to data folder
+
+```{r writeAnalyticFiles, eval = F}
+### Write Analytic Files
+# dir.create(here::here("data"))
+
+write.csv(pt.analytic.df,
+         here::here("data", "PupilLightResponse_AnalyticSample_Demog.csv"),
+         row.names = F)
+
+write.csv(right_0.post.w,
+          here::here("data", "PupilLightResponse_RightEye_Post_Wide.csv"),
+          row.names = F)
+
+write.csv(right_0.post,
+          here::here("data", "PupilLightResponse_RightEye_Post_Long.csv"),
+          row.names = F)
+
+write.csv(left_0.post.w,
+          here::here("data", "PupilLightResponse_LeftEye_Post_Wide.csv"),
+          row.names = F)
+
+write.csv(left_0.post,
+          here::here("data", "PupilLightResponse_LeftEye_Post_Long.csv"),
+          row.names = F)
+```
+
+
+```{r vis_exclPts_wPostdata}
+for(i in post.exclude.ids){
+  print(ggplot(ps[ps$subject_id == i & ps$tp == "post" & ps$eye == "Right", ], 
+         aes(x = frame, y = percent_change))+
+          geom_line())
+}
+```
