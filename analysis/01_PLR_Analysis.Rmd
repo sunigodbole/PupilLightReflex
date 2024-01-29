@@ -256,18 +256,22 @@ sofr_imputed <- sofr_impute_df
 sofr_imputed[is.na(sofr_imputed)] <-  sofr_fpca2[is.na(sofr_imputed)]
 
 ncols = ncol(sofr_imputed)
-
-smk.df <- pt.analytic.df[, c("subject_id", "user_cat")]
+pt.analytic.df$female <- ifelse(pt.analytic.df$demo_gender == "Female", 1, 0)
+smk.df <- pt.analytic.df[, c("subject_id", "user_cat", "female", "BMI")]
 smk.df$smoker <- ifelse(pt.analytic.df$user_cat %in% c("daily", "occasional"), 1, 0)
 
 sind <- seq(0, 1, len = ncols)
 smat <- matrix(sind, nrow(smk.df), ncols, byrow = T)
+
+test <- 
 
 # smk.df$Zsm <- I(Zsm)
 smk.df$Zraw <- I(as.matrix(sofr_imputed))
 smk.df$smat <- I(smat)
 smk.df$lmat <- I(matrix(1/ncols, nrow(smk.df), ncols))
 smk.df$zlmat <- I(smk.df$lmat * smk.df$Zraw)
+smk.df$bmiMat <- I(replicate(ncol(smk.df$smat), smk.df$BMI))
+smk.df$femaleMat <- I(replicate(ncol(smk.df$smat), smk.df$female))
 
 smk_fglm_ps2 <- gam(smoker ~ s(smat, by=zlmat, bs = "cr", k = 30), data=smk.df, 
                    method = "REML", family = binomial)
@@ -293,6 +297,30 @@ sofr_auc <- data.frame("subject_id" = smk.df$subject_id,
 auc_inference <- merge(auc_inference, sofr_auc, 
                        by = c("subject_id", "smoker"))
 ```
+
+## New model with sex and bmi as covariates
+```{r sofr_covariates}
+# original model: smk_fglm_ps2
+
+# Sex and gender added as scalar features
+smk_fglm_cv <- gam(smoker ~ female + BMI +
+                     s(smat, by=zlmat, bs = "cr", k = 30), 
+                   data=smk.df, 
+                   method = "REML", family = binomial)
+summary(smk_fglm_cv)
+anova(smk_fglm_cv, smk_fglm_ps2, test = "Chisq")
+
+# Sex and gender added as functional coefficients
+## -- Not sure if this is the right specification
+smk_fglm_fcv <- gam(smoker ~ s(smat, by=zlmat, bs = "cr", k = 30)+
+                      s(smat, by= femaleMat, bs = "cr", k = 30)+
+                      s(smat, by= bmiMat, bs = "cr", k = 30),
+                    data=smk.df, 
+                   method = "REML", family = binomial)
+
+anova(smk_fglm_fcv, smk_fglm_ps2, test = "Chisq")
+```
+
 
 ### Plot of SoFR with fPCA imputed data for missing values
 
@@ -697,6 +725,7 @@ post_gam.fri <- mgcv::bam(percent_change ~
 summary(post_gam.fri)
 ```
 
+
 ```{r getLegend, echo = F}
 g_legend<-function(a.gplot){
   tmp <- ggplot_gtable(ggplot_build(a.gplot))
@@ -1057,6 +1086,108 @@ labeled.fosr.plot
 
 ```
 
+### Add sex and BMI as covariates to the model (scalar and smoothed terms)
+
+```{r fosr_sex_bmi}
+#original model: post_gam.fri
+
+fosr_sex_gen.fri <- mgcv::bam(percent_change ~
+                              female +  BMI +  
+                            s(sind, k=30, bs="cr") + 
+                            s(sind, by=occasional, k=30, bs = "cr") + 
+                            s(sind, by=daily, k=30, bs = "cr") +
+                            s(subject_id, by = Phi1, bs="re") + s(subject_id, by = Phi2, bs="re")+
+                            s(subject_id, by = Phi3, bs="re") + s(subject_id, by = Phi4, bs="re"), 
+                          method = "fREML", data = right_0.gam.df, discrete = TRUE)
+anova(fosr_sex_gen.fri, post_gam.fri, test = "Chisq")
+
+fosr_sex_gen_sm.fri <- mgcv::bam(percent_change ~
+                                s(sind, by=female, k=30, bs = "cr") + 
+                                s(sind, by=BMI, k=30, bs="cr") +  
+                            s(sind, k=30, bs="cr") + 
+                            s(sind, by=occasional, k=30, bs = "cr") + 
+                            s(sind, by=daily, k=30, bs = "cr") +
+                            s(subject_id, by = Phi1, bs="re") + s(subject_id, by = Phi2, bs="re")+
+                            s(subject_id, by = Phi3, bs="re") + s(subject_id, by = Phi4, bs="re"), 
+                          method = "fREML", data = right_0.gam.df, discrete = TRUE)
+
+anova(fosr_sex_gen_sm.fri, post_gam.fri, test = "Chisq")
+```
+
+
+```{r plot_sex_coef}
+post_gam.coef <- fosr_sex_gen_sm.fri$coefficients
+post_gam.cov <- vcov.gam(fosr_sex_gen_sm.fri)
+
+df_pred_male <- data.frame("sind" = unique(right_0.gam.df$sind), 
+                          "female" = 0, 
+                          "BMI" = 0,
+                          "occasional" = 0, "daily" = 0, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = right_0.gam.df$subject_id[1])
+
+lpmat_male <- predict(fosr_sex_gen_sm.fri, newdata=df_pred_male, se.fit=TRUE, type = "lpmatrix")
+
+
+df_pred_female <- data.frame("sind" = unique(right_0.gam.df$sind),
+                             "female" = 1, 
+                             "BMI" = 0,
+                             "occasional" = 0, "daily" = 0, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = right_0.gam.df$subject_id[1])
+
+pred_female <- predict(fosr_sex_gen_sm.fri, newdata=df_pred_female, se.fit=TRUE, type = "terms")
+
+pred_sex_coef <- data.frame(seconds = seq(0, 400)/30,
+                           f0_hat = lpmat_male %*% post_gam.coef, 
+                           f0_se = sqrt(diag(lpmat_male %*% post_gam.cov %*% t(lpmat_male))), 
+                           f1_hat = pred_female$fit[, 1], 
+                           f1_se = pred_female$se.fit[, 1])
+
+post_sex_plt <- ggplot(data = pred_sex_coef, aes(x=seconds, y = f1_hat))+
+                geom_line()+
+                geom_line(aes(x = seconds, y = f1_hat + 2*f1_se), linetype = "longdash")+
+                geom_line(aes(x = seconds, y = f1_hat - 2*f1_se), linetype = "longdash")+
+                scale_x_continuous(expand = c(0, 0), limits = c(0,10))+
+                scale_y_continuous(limits = c(-6, 6))+
+                labs(title = "Difference in Average Percent Change Between Males and Females", 
+                     y = "Percent Change", 
+                     x = "Seconds from start of light test")+
+                theme_bw()
+
+post_sex_plt
+
+## BMI
+
+df_pred_bmi <- data.frame("sind" = unique(right_0.gam.df$sind),
+                             "female" = 0, 
+                             "BMI" = 1,
+                             "occasional" = 0, "daily" = 0, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = right_0.gam.df$subject_id[1])
+
+pred_bmi <- predict(fosr_sex_gen_sm.fri, newdata=df_pred_bmi, se.fit=TRUE, type = "terms")
+
+pred_bmi_coef <- data.frame(seconds = seq(0, 400)/30,
+                           f1_hat = pred_bmi$fit[, 2], 
+                           f1_se = pred_bmi$se.fit[, 2])
+
+post_bmi_plt <- ggplot(data = pred_sex_coef, aes(x=seconds, y = f1_hat))+
+                geom_line()+
+                geom_line(aes(x = seconds, y = f1_hat + 2*f1_se), linetype = "longdash")+
+                geom_line(aes(x = seconds, y = f1_hat - 2*f1_se), linetype = "longdash")+
+                scale_x_continuous(expand = c(0, 0), limits = c(0,10))+
+                scale_y_continuous(limits = c(-6, 6))+
+                labs(title = "Difference in Average Percent Change for one unit change in BMI", 
+                     y = "Difference in Percent Change", 
+                     x = "Seconds from start of light test")+
+                theme_bw()
+post_sex_plt
+post_bmi_plt
+```
 
 ## Effect of Post Consumption time to test (PCTT) on trajectories of pupillary light reflex
 
@@ -1069,7 +1200,7 @@ pctt_hist <- ggplot(data= pt.analytic.df[pt.analytic.df$user_cat != "non-user", 
               scale_y_continuous(expand = c(0,0))+
               scale_x_continuous(breaks = c(53, 60, 65, 70, 77, 84))+
   labs(x= "Time delay from consumption to test (mins)", 
-       y = "")+
+       y = "Number of participants")+
   theme_bw()
 pctt_hist
 ```
