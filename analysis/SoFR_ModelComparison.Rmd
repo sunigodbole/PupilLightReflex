@@ -1,0 +1,311 @@
+---
+title: "SoFR model comparison"
+author: "Suni Godbole"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: lumen
+---
+
+```{r setup, include=FALSE}
+library(openxlsx)
+library(ggplot2)
+library(refund)
+library(refund.shiny)
+library(pROC)
+library(stringr)
+library(PerformanceAnalytics)
+library(mgcv)
+library(grid)
+library(gridExtra)
+library(haven)
+library(Hmisc)
+library(ggpmisc)
+library(viridis)
+library(gtsummary)
+library(cowplot)
+library(ggpubr)
+library(plotROC)
+library(ggrepel)
+
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE,
+  dpi = 500,
+  fig.width = 9,
+  fig.height = 4,
+  fig.path = '../figs/'
+)
+
+theme_set(theme_bw() + theme(legend.position = "bottom"))
+```
+
+Read in Analytic Data files
+
+```{r readIn}
+pt.analytic.df <- read.csv(here::here("data", "PupilLightResponse_AnalyticSample_Demog.csv"), 
+                           header = T, stringsAsFactors = F)
+
+pt.analytic.df$BMI_c <- pt.analytic.df$BMI - round(mean(pt.analytic.df$BMI), 2)
+
+right_0.post.w <- read.csv(here::here("data", "PupilLightResponse_RightEye_Post_Wide.csv"), 
+                           header = T, stringsAsFactors = F)
+
+rownames(right_0.post.w) <- right_0.post.w$subject_id
+
+# right_0.post <- read.csv(here::here("data", "PupilLightResponse_RightEye_Post_Long.csv"), 
+#                            header = T, stringsAsFactors = F)
+```
+
+# Original model -- no covariates
+
+```{r sofr_fpcaImpute_roc}
+pctChg_vars <- names(right_0.post.w)[grepl("percent_change", names(right_0.post.w))]
+
+sofr_impute_df <- right_0.post.w[, pctChg_vars]
+rownames(sofr_impute_df) <- rownames(right_0.post.w)
+
+sofr_fpca <- fpca.face(as.matrix(sofr_impute_df))
+sofr_fpca2 <- sofr_fpca$Yhat
+names(sofr_fpca2) <- names(sofr_impute_df)
+
+## Adding in fpca imputed data where missing
+sofr_imputed <- sofr_impute_df
+sofr_imputed[is.na(sofr_imputed)] <-  sofr_fpca2[is.na(sofr_imputed)]
+
+ncols = ncol(sofr_imputed)
+pt.analytic.df$female <- ifelse(pt.analytic.df$demo_gender == "Female", 1, 0)
+smk.df <- pt.analytic.df[, c("subject_id", "user_cat", "female", "BMI_c")]
+smk.df$smoker <- ifelse(pt.analytic.df$user_cat %in% c("daily", "occasional"), 1, 0)
+
+sind <- seq(0, 1, len = ncols)
+smat <- matrix(sind, nrow(smk.df), ncols, byrow = T)
+
+smk.df$Zraw <- I(as.matrix(sofr_imputed))
+smk.df$smat <- I(smat)
+smk.df$lmat <- I(matrix(1/ncols, nrow(smk.df), ncols))
+smk.df$zlmat <- I(smk.df$lmat * smk.df$Zraw)
+
+smk_fglm_ps2 <- gam(smoker ~ s(smat, by=zlmat, bs = "cr", k = 30), data=smk.df, 
+                   method = "REML", family = binomial)
+summary(smk_fglm_ps2)
+```
+
+
+# New model with sex and bmi as covariates
+
+```{r sofr_covariates}
+# original model: smk_fglm_ps2
+
+# Sex and gender added as scalar features
+smk_fglm_cv <- gam(smoker ~ female + BMI_c +
+                     s(smat, by=zlmat, bs = "cr", k = 30), 
+                   data=smk.df, 
+                   method = "REML", family = binomial)
+summary(smk_fglm_cv)
+anova(smk_fglm_cv, smk_fglm_ps2, test = "Chisq")
+```
+
+# Plot Original Model
+```{r sofr_plot_setup}
+df_sofr <- data.frame("smat" = seq(0, 1, length.out = ncol(smk.df$smat)),
+                      "zlmat" = 1)
+sofr_pred <- predict(smk_fglm_ps2, newdata = df_sofr, se.fit = TRUE, type = "iterms")
+# sofr_pred2 <- predict(smk_fglm_ps2, newdata = df_sofr, se.fit = TRUE, type = "terms")
+plot.sofr <- data.frame("frame" = 0:(ncol(smk.df$smat) - 1),
+                            "f0" = sofr_pred$fit[, 1],
+                            'f0.se' = sofr_pred$se.fit[, 1])
+
+plot.sofr$lci <- exp(plot.sofr$f0 - 1.96*plot.sofr$f0.se)
+plot.sofr$uci <- exp(plot.sofr$f0 + 1.96*plot.sofr$f0.se)
+plot.sofr$OR <- exp(plot.sofr$f0)
+plot.sofr$sec <- plot.sofr$frame/30
+plot.sofr$p <- exp(plot.sofr$f0)/(1+exp(plot.sofr$f0))
+```
+
+```{r findSigRegions}
+sigRegion <- function(df, crit.val, imp.var){
+  time <- imp.var[1]
+  est <- imp.var[2]
+  lci <- imp.var[3]
+  uci <- imp.var[4]
+  
+  
+  crit.rows <- which((df[, lci] < crit.val & df[, uci] < crit.val) |
+                       (df[, lci] > crit.val & df[, uci] > crit.val))
+  
+  # print(crit.rows)
+  
+  group <- vector(mode = "numeric", length = length(crit.rows))
+  grp.ind <- 1
+  for(i in 1:length(crit.rows)){
+    if(i == 1){
+      group[i] <- grp.ind}
+    else(if(i > 1){
+      if(crit.rows[i] - crit.rows[i-1] == 1){
+        group[i] <- grp.ind
+      }
+      else(if(crit.rows[i] - crit.rows[i-1] != 1){
+        grp.ind <- grp.ind+1
+        group[i] <- grp.ind
+      })
+    })
+    
+  }
+  # print(group)
+  
+  num.grp <- unique(group)
+  ind.df <- data.frame(group = NA, 
+                       start = NA, 
+                       end = NA)
+  for(i in num.grp){
+    ind.df[i,] <- c(i, min(crit.rows[group == i]), max(crit.rows[group == i]))
+  }
+  
+  # print(ind.df)
+  
+  res.df <- data.frame(int.start = NA, 
+                       int.end = NA, 
+                       est.time = NA,
+                       est = NA,
+                       lci = NA,
+                       uci = NA)
+  # print(nrow(ind.df))
+  
+  for(i in 1:nrow(ind.df)){
+    
+    sub.df <- df[(ind.df$start[i]):(ind.df$end[i]), ]
+    
+    # print(sub.df[1, ])
+    
+    if(sub.df[1, lci] > crit.val & sub.df[1, uci] >crit.val){
+      start1 <- round(sub.df[1, time], 2)
+      end1 <- round(sub.df[nrow(sub.df), time], 2)
+      or1 <- max(sub.df[ , est])
+      peaktime1 <- round(sub.df[sub.df[, est] == or1, time], 2)
+      lci1 <- round(sub.df[sub.df[, est] == or1, lci], 2)
+      uci1 <- round(sub.df[sub.df[, est] == or1, uci], 2)
+      or1 <- round(or1, 2)
+      
+      res.df[i, ] <- c(start1, end1, peaktime1, or1, lci1, uci1)
+      # print(res.df)
+      
+    }
+    if(sub.df[1, lci] < crit.val & sub.df[1, uci] < crit.val){
+      start2 <- round(sub.df[1, time], 2)
+      end2 <- round(sub.df[nrow(sub.df), time], 2)
+      or2 <- min(sub.df[, est])
+      peaktime2 <- round(sub.df[sub.df[, est] == or2, time], 2)
+      lci2 <- round(sub.df[sub.df[, est] == or2, lci], 2)
+      uci2 <- round(sub.df[sub.df[, est] == or2, uci], 2)
+      or2 <- round(or2, 2)
+      
+      res.df[i, ] <- c(start2, end2, peaktime2, or2, lci2, uci2)
+      # print(res.df)
+    }
+  }
+  
+  
+  # crit.ind <- by(crit.rows, INDICES = list(group), FUN = function(x) c(min(x), max(x)))
+  return(res.df)
+}
+```
+
+```{r sofr_sigRegions}
+sofr.sigRegions <- sigRegion(plot.sofr, 1, imp.var = c("sec", "OR", "lci", "uci"))
+```
+
+```{r sofr_plot}
+sofr_plot <- ggplot(data = plot.sofr, aes(x=frame/30, y = exp(f0)))+
+  geom_line()+
+  geom_line(aes(x=frame/30, y = exp(f0-1.96*f0.se)), linetype = 'longdash')+
+  geom_line(aes(x=frame/30, y = exp(f0+1.96*f0.se)), linetype = 'longdash')+
+  geom_segment(data=sofr.sigRegions, aes(x = int.start, y=1, xend= int.end, yend = 1), 
+               color = "darkred", linewidth =1.2)+
+  # geom_hline(yintercept = 1, color = "darkred", linetype = 1) +
+  scale_x_continuous(expand = c(0, 0), limits = c(0,10), 
+                     breaks = c(0,2,4,6,8,10))+
+  scale_y_continuous(limits = c(0,8), 
+                     breaks = c(0,1,2,3,4,6,8)) +
+  labs(title = "", 
+       x = "Seconds after start of light test", 
+       y = "Odds ratio between smokers and non-smokers")+
+  theme_bw()
+
+sofr_plot
+```
+
+# Plot comparison of odds ratio between models including demographics and OG model
+
+```{r sofr_plot_sex}
+df_sofr_sex <- data.frame("smat" = seq(0, 1, length.out = ncol(smk.df$smat)),
+                      "zlmat" = 1, female = 0, BMI_c = 0)
+sofr_pred_sex<- predict(smk_fglm_cv, newdata = df_sofr_sex, se.fit = TRUE, type = "iterms")
+
+df_sofr <- data.frame("smat" = seq(0, 1, length.out = ncol(smk.df$smat)),
+                      "zlmat" = 1)
+sofr_pred<- predict(smk_fglm_ps2, newdata = df_sofr, se.fit = TRUE, type = "iterms")
+
+plot.sofr_sex <- data.frame("frame" = 0:(ncol(smk.df$smat) - 1),
+                            "model_demog" = sofr_pred_sex$fit[,3],
+                            "model_demog_se" = sofr_pred_sex$se.fit[,3],
+                            "model_og" = sofr_pred$fit[,1], 
+                            "model_og_se" = sofr_pred$se.fit[,1])
+
+sofr_plot_sex <- ggplot(data = plot.sofr_sex, aes(x=frame/30, y = exp(model_og)))+
+  geom_line()+
+  geom_line(aes(x=frame/30, y = exp(model_og-1.96*model_og_se)), linetype = 'longdash')+
+  geom_line(aes(x=frame/30, y = exp(model_og+1.96*model_og_se)), linetype = 'longdash')+
+  geom_line(aes(x = frame/30, y = exp(model_demog)), col = 'red')+
+  geom_line(aes(x=frame/30, y = exp(model_demog-1.96*model_demog_se)), linetype = 'longdash', col = "red")+
+  geom_line(aes(x=frame/30, y = exp(model_demog+1.96*model_demog_se)), linetype = 'longdash', col = "red")+
+  scale_x_continuous(expand = c(0, 0), limits = c(0,10), 
+                     breaks = c(0,2,4,6,8,10))+
+  scale_y_continuous(limits = c(0,8),
+                     breaks = c(0,1,2,3,4,6,8)) +
+  labs(title = "", 
+       x = "Seconds after start of light test", 
+       y = "Odds ratio between smokers and non-smokers")+
+  theme_bw()
+
+sofr_plot_sex
+```
+Red line is the model with the demographic variables. Black line is the original model.
+
+
+# refund::pfr
+
+## Original Model
+```{r refund_og_model}
+
+og.pfr <- pfr(smoker ~ lf(Zraw, argvals = smat, k = 30, integration = "riemann", L= lmat, bs = "cr"),  data = smk.df, 
+              method = "REML", family = binomial)
+
+test <- plot(og.pfr)
+
+plot(seq(0:99)/10, exp(test[[1]]$fit), "l", ylim = c(-1,8))
+lines(seq(0:99)/10, exp(test[[1]]$fit - 1.96*test[[1]]$se), lty = "dashed")
+lines(seq(0:99)/10, exp(test[[1]]$fit + 1.96*test[[1]]$se), lty = "dashed")
+
+```
+
+## Model with demographics
+
+```{r refund_demog_model}
+
+demog.pfr <- pfr(smoker ~ female + BMI_c + lf(Zraw, argvals = smat, k = 30, integration = "riemann", L= lmat, bs = "cr"),  data = smk.df, 
+              method = "REML", family = binomial)
+
+test <- plot(demog.pfr)
+
+plot(seq(0:99)/10, exp(test[[1]]$fit), "l", ylim = c(-1,8))
+lines(seq(0:99)/10, exp(test[[1]]$fit - 1.96*test[[1]]$se), lty = "dashed")
+lines(seq(0:99)/10, exp(test[[1]]$fit + 1.96*test[[1]]$se), lty = "dashed")
+
+```
