@@ -1,0 +1,547 @@
+---
+title: "02_Revisions"
+author: "Suni Godbole"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    code_folding: hide
+    toc: true
+    toc_float: true
+    toc_collapsed: true
+    toc_depth: 3
+    number_sections: true
+    theme: lumen
+---
+
+# Analysis File for manuscript
+
+```{r setup, include=FALSE}
+library(openxlsx)
+library(ggplot2)
+library(refund)
+library(refund.shiny)
+library(pROC)
+library(stringr)
+library(PerformanceAnalytics)
+library(mgcv)
+library(grid)
+library(gridExtra)
+library(haven)
+library(Hmisc)
+library(ggpmisc)
+library(viridis)
+library(gtsummary)
+library(cowplot)
+library(ggpubr)
+library(plotROC)
+library(ggrepel)
+
+knitr::opts_chunk$set(
+  warning = FALSE,
+  message = FALSE,
+  dpi = 500,
+  fig.width = 9,
+  fig.height = 4,
+  fig.path = '../figs/'
+)
+
+theme_set(theme_bw() + theme(legend.position = "bottom"))
+```
+
+
+Read in Analytic Data files
+
+```{r readIn}
+pt.analytic.df <- read.csv(here::here("data", "PupilLightResponse_AnalyticSample_Demog.csv"), 
+                           header = T, stringsAsFactors = F)
+
+pt.analytic.df$BMI_c <- pt.analytic.df$BMI - round(mean(pt.analytic.df$BMI), 2)
+
+right_0.post.w <- read.csv(here::here("data", "PupilLightResponse_RightEye_Post_Wide.csv"), 
+                           header = T, stringsAsFactors = F)
+
+rownames(right_0.post.w) <- right_0.post.w$subject_id
+
+right_0.post <- read.csv(here::here("data", "PupilLightResponse_RightEye_Post_Long.csv"), 
+                           header = T, stringsAsFactors = F)
+```
+
+# Figure Individual Pupil Trajectories 
+
+```{r postPlot, warning= F}
+right_0.post$user_cat2 <- ifelse(right_0.post$user_cat == "daily", 0, 
+                                 ifelse(right_0.post$user_cat == "occasional", 1, 2))
+
+right_0.post$user_cat2 <- factor(right_0.post$user_cat2, 
+                                 levels = c(0,1,2), 
+                                 labels = c("Daily Use", "Occasional Use", "No Use"))
+
+post.user <- ggplot(right_0.post, aes(x=seconds, y = percent_change, group = subject_id))+
+             geom_line(show.legend = FALSE, alpha = 0.2)+
+             facet_grid(rows = vars(user_cat2))+
+             labs(y = "Percent change in pupil response", 
+                  x = "Seconds from start of light test")+
+             theme_bw()
+
+post.user
+```
+
+
+### Post use trajectors by use groups (individual plots) [manuscript]
+
+```{r post_userPlot_ms, eval = F}
+jpeg(filename = here::here("figs", "Post_use_Indiv_Trajectories.jpeg"), 
+     width = 6, height = 6, res = 300, units = "in")
+post.user
+dev.off()
+
+```
+
+# Analysis
+
+## SoFR for prediction of smoking
+
+Another method that can be used to predict smoking status is a scalar-on-function regression model which uses differences between the whole trajectories to determine smoking status. However, when there are missing values (due to different test durations), all trajectories should be truncated to the shortest or the values should be imputed with fPCA. (See exploration of using SoFR line starting at 3000) 
+
+```{r sofr_fpcaImpute_roc}
+pctChg_vars <- names(right_0.post.w)[grepl("percent_change", names(right_0.post.w))]
+pctChg_vars <- pctChg_vars[1:226]
+
+sofr_impute_df <- right_0.post.w[, pctChg_vars]
+rownames(sofr_impute_df) <- rownames(right_0.post.w)
+
+sofr_fpca <- fpca.face(as.matrix(sofr_impute_df))
+sofr_fpca2 <- sofr_fpca$Yhat
+names(sofr_fpca2) <- names(sofr_impute_df)
+
+## Adding in fpca imputed data where missing
+sofr_imputed <- sofr_impute_df
+sofr_imputed[is.na(sofr_imputed)] <-  sofr_fpca2[is.na(sofr_imputed)]
+
+ncols = ncol(sofr_imputed)
+pt.analytic.df$female <- ifelse(pt.analytic.df$demo_gender == "Female", 1, 0)
+smk.df <- pt.analytic.df[, c("subject_id", "user_cat", "female", "BMI_c")]
+smk.df$smoker <- ifelse(pt.analytic.df$user_cat %in% c("daily", "occasional"), 1, 0)
+
+sind <- seq(0, 1, len = ncols)
+smat <- matrix(sind, nrow(smk.df), ncols, byrow = T)
+
+# smk.df$Zsm <- I(Zsm)
+smk.df$Zraw <- I(as.matrix(sofr_imputed))
+smk.df$smat <- I(smat)
+smk.df$lmat <- I(matrix(1/ncols, nrow(smk.df), ncols))
+smk.df$zlmat <- I(smk.df$lmat * smk.df$Zraw)
+# smk.df$bmiMat <- I(replicate(ncol(smk.df$smat), smk.df$BMI))
+# smk.df$femaleMat <- I(replicate(ncol(smk.df$smat), smk.df$female))
+
+smk_fglm_ps2 <- gam(smoker ~ s(smat, by=zlmat, bs = "cr", k = 30), data=smk.df, 
+                   method = "REML", family = binomial)
+summary(smk_fglm_ps2)
+
+pt.sofr.roc <- roc(smk_fglm_ps2$model$smoker, smk_fglm_ps2$fitted.values, ci = TRUE)
+pt.sofr.roc.auc <- auc(pt.sofr.roc)
+pt.sofr.auc.lci <- as.numeric(pt.sofr.roc$ci)[1]
+pt.sofr.auc.uci <- as.numeric(pt.sofr.roc$ci)[3]
+```
+
+## Concurvity of SoFR model
+```{r concurv}
+concurvity(smk_fglm_ps2)
+
+concurvity(smk_fglm_ps2, full= FALSE)
+```
+
+
+## New model with sex and bmi as covariates
+```{r sofr_covariates}
+# Sex and gender added as scalar features
+smk_fglm_cv <- gam(smoker ~ female + BMI_c +
+                     s(smat, by=zlmat, bs = "cr", k = 30), 
+                   data=smk.df, 
+                   method = "REML", family = binomial)
+summary(smk_fglm_cv)
+anova(smk_fglm_cv, smk_fglm_ps2, test = "Chisq")
+```
+
+### Extract Significant Regions in SoFR analysis
+
+```{r findSigRegions}
+sigRegion <- function(df, crit.val, imp.var){
+  time <- imp.var[1]
+  est <- imp.var[2]
+  lci <- imp.var[3]
+  uci <- imp.var[4]
+  
+  
+  crit.rows <- which((df[, lci] < crit.val & df[, uci] < crit.val) |
+                       (df[, lci] > crit.val & df[, uci] > crit.val))
+  
+  # print(crit.rows)
+  
+  group <- vector(mode = "numeric", length = length(crit.rows))
+  grp.ind <- 1
+  for(i in 1:length(crit.rows)){
+    if(i == 1){
+      group[i] <- grp.ind}
+    else(if(i > 1){
+      if(crit.rows[i] - crit.rows[i-1] == 1){
+        group[i] <- grp.ind
+      }
+      else(if(crit.rows[i] - crit.rows[i-1] != 1){
+        grp.ind <- grp.ind+1
+        group[i] <- grp.ind
+      })
+    })
+    
+  }
+  # print(group)
+  
+  num.grp <- unique(group)
+  ind.df <- data.frame(group = NA, 
+                       start = NA, 
+                       end = NA)
+  for(i in num.grp){
+    ind.df[i,] <- c(i, min(crit.rows[group == i]), max(crit.rows[group == i]))
+  }
+  
+  # print(ind.df)
+  
+  res.df <- data.frame(int.start = NA, 
+                       int.end = NA, 
+                       est.time = NA,
+                       est = NA,
+                       lci = NA,
+                       uci = NA)
+  # print(nrow(ind.df))
+  
+  for(i in 1:nrow(ind.df)){
+    
+    sub.df <- df[(ind.df$start[i]):(ind.df$end[i]), ]
+    
+    # print(sub.df[1, ])
+    
+    if(sub.df[1, lci] > crit.val & sub.df[1, uci] >crit.val){
+      start1 <- round(sub.df[1, time], 2)
+      end1 <- round(sub.df[nrow(sub.df), time], 2)
+      or1 <- max(sub.df[ , est])
+      peaktime1 <- round(sub.df[sub.df[, est] == or1, time], 2)
+      lci1 <- round(sub.df[sub.df[, est] == or1, lci], 2)
+      uci1 <- round(sub.df[sub.df[, est] == or1, uci], 2)
+      or1 <- round(or1, 2)
+      
+      res.df[i, ] <- c(start1, end1, peaktime1, or1, lci1, uci1)
+      # print(res.df)
+      
+    }
+    if(sub.df[1, lci] < crit.val & sub.df[1, uci] < crit.val){
+      start2 <- round(sub.df[1, time], 2)
+      end2 <- round(sub.df[nrow(sub.df), time], 2)
+      or2 <- min(sub.df[, est])
+      peaktime2 <- round(sub.df[sub.df[, est] == or2, time], 2)
+      lci2 <- round(sub.df[sub.df[, est] == or2, lci], 2)
+      uci2 <- round(sub.df[sub.df[, est] == or2, uci], 2)
+      or2 <- round(or2, 2)
+      
+      res.df[i, ] <- c(start2, end2, peaktime2, or2, lci2, uci2)
+      # print(res.df)
+    }
+  }
+  
+  
+  # crit.ind <- by(crit.rows, INDICES = list(group), FUN = function(x) c(min(x), max(x)))
+  return(res.df)
+}
+```
+
+
+```{r sofr_plot_sex}
+## Covar Adjusted Model
+df_sofr_sex <- data.frame("smat" = seq(0, 1, length.out = ncol(smk.df$smat)),
+                      "zlmat" = 1, female = 0, BMI_c = 0)
+sofr_pred_sex<- predict(smk_fglm_cv, newdata = df_sofr_sex, se.fit = TRUE, type = "iterms")
+
+# Original Model (unadjusted)
+df_sofr <- data.frame("smat" = seq(0, 1, length.out = ncol(smk.df$smat)),
+                      "zlmat" = 1)
+sofr_pred<- predict(smk_fglm_ps2, newdata = df_sofr, se.fit = TRUE, type = "iterms")
+
+plot.sofr_sex <- data.frame("frame" = 0:(ncol(smk.df$smat) - 1),
+                            "model_demog" = sofr_pred_sex$fit[,3],
+                            "model_demog_se" = sofr_pred_sex$se.fit[,3],
+                            "model_og" = sofr_pred$fit[,1], 
+                            "model_og_se" = sofr_pred$se.fit[,1])
+
+plot.sofr_sex$lci <- exp(plot.sofr_sex$model_demog - 1.96*plot.sofr_sex$model_demog_se)
+plot.sofr_sex$uci <- exp(plot.sofr_sex$model_demog + 1.96*plot.sofr_sex$model_demog_se)
+plot.sofr_sex$OR <- exp(plot.sofr_sex$model_demog)
+plot.sofr_sex$sec <- plot.sofr_sex$frame/30
+plot.sofr_sex$p <- exp(plot.sofr_sex$model_demog)/(1+exp(plot.sofr_sex$model_demog))
+
+sofr.sigRegions <- sigRegion(plot.sofr_sex, 1, imp.var = c("sec", "OR", "lci", "uci"))
+
+
+sofr_plot_sex <- ggplot()+
+  geom_rect(data = sofr.sigRegions, aes(xmin = int.start, xmax = int.end, 
+                                        ymin = -Inf, ymax = Inf), fill = "lightpink", alpha = 0.3)+
+  geom_hline(yintercept = 1, col = "darkorange")+
+  geom_line(data = plot.sofr_sex, aes(x=sec, y = exp(model_og)))+
+  geom_line(data = plot.sofr_sex, aes(x=sec, y = exp(model_og-1.96*model_og_se)), linetype = 'longdash')+
+  geom_line(data = plot.sofr_sex, aes(x=sec, y = exp(model_og+1.96*model_og_se)), linetype = 'longdash')+
+  geom_line(data = plot.sofr_sex, aes(x = sec, y = exp(model_demog)), col = 'purple')+
+  geom_line(data = plot.sofr_sex, aes(x=sec, y = exp(model_demog-1.96*model_demog_se)), linetype = 'longdash', col = "purple")+
+  geom_line(data = plot.sofr_sex, aes(x=sec, y = exp(model_demog+1.96*model_demog_se)), linetype = 'longdash', col = "purple")+
+  
+  scale_x_continuous(expand = c(0, 0), limits = c(0,7.5), 
+                     breaks = c(0,2,4,5,6,7))+
+  scale_y_continuous(limits = c(0,5),
+                     breaks = c(0,1,2,3,4,5)) +
+  labs(title = "", 
+       x = "Seconds after start of light test", 
+       y = "Odds ratio between smokers and non-smokers")+
+  theme_bw()
+
+sofr_plot_sex
+```
+
+# FoSR adjustment for covariates
+
+```{r pt_analytic, echo = F}
+#pt.analytic.df <- pt.df[pt.df$subject_id %in% analytic.N, ]
+pt.analytic.df$occasional <- ifelse(pt.analytic.df$user_cat == "occasional", 1, 0)
+pt.analytic.df$daily  <- ifelse(pt.analytic.df$user_cat == "daily", 1, 0)
+
+pt.analytic.df <- pt.analytic.df[order(pt.analytic.df$subject_id), ]
+```
+
+## Original model unadjusted for sex and BMI covariates.
+
+```{r post_gam}
+right_0.gam.df <- merge(right_0.post, pt.analytic.df, 
+                        by = c("subject_id", "user_cat"))
+
+right_0.gam.df$sind <- right_0.gam.df$frame/400
+
+m.post_gam <- mgcv::gam(percent_change ~ s(sind, k=30, bs="cr") + 
+                          s(sind, by=occasional, k=30, bs = "cr") + 
+                          s(sind, by=daily, k=30, bs = "cr"), 
+                  data = right_0.gam.df, method = "REML")
+
+## Create a matrix of residuals
+post_gam.resid <- cbind(right_0.gam.df[!(is.na(right_0.gam.df$percent_change)), 
+                                       c("subject_id", "frame")], 
+                        m.post_gam$residuals)
+names(post_gam.resid) <- c("subject_id", "frame", "resid")
+
+resid_mat <- reshape(post_gam.resid[, c("subject_id", "frame", "resid")], 
+                     timevar = "frame", 
+                     idvar = "subject_id", 
+                     direction = "wide")
+rownames(resid_mat) <- resid_mat$subject_id
+resid_mat$subject_id <- NULL
+
+resid_mat <- as.matrix(resid_mat)
+
+post_gam.fpca <- fpca.face(resid_mat, knots = 15)
+
+#Create data frame of eigen functions and attach to original data
+Phi_mat <- as.data.frame(post_gam.fpca$efunctions)
+colnames(Phi_mat) <- paste0("Phi", seq(1, post_gam.fpca$npc))
+Phi_mat$frame <- as.numeric(rownames(Phi_mat)) -1
+
+right_0.gam.df <- merge(right_0.gam.df, Phi_mat, 
+                        by = "frame", 
+                        all.x = T)
+right_0.gam.df <- right_0.gam.df[order(right_0.gam.df$subject_id, right_0.gam.df$frame), ]
+right_0.gam.df$subject_id <- as.factor(right_0.gam.df$subject_id)
+
+post_gam.fri <- mgcv::bam(percent_change ~ 
+                            s(sind, k=30, bs="cr") + 
+                            s(sind, by=occasional, k=30, bs = "cr") + 
+                            s(sind, by=daily, k=30, bs = "cr") +
+                            s(subject_id, by = Phi1, bs="re") + s(subject_id, by = Phi2, bs="re")+
+                            s(subject_id, by = Phi3, bs="re") + s(subject_id, by = Phi4, bs="re"), 
+                          method = "fREML", data = right_0.gam.df, discrete = TRUE)
+
+
+summary(post_gam.fri)
+```
+
+### Add sex and BMI as covariates to the model (scalar and smoothed terms)
+
+```{r fosr_sex_bmi}
+#original model: post_gam.fri
+fosr_sex_gen.fri <- mgcv::bam(percent_change ~
+                              female +  BMI_c +  
+                            s(sind, k=30, bs="cr") + 
+                            s(sind, by=occasional, k=30, bs = "cr") + 
+                            s(sind, by=daily, k=30, bs = "cr") +
+                            s(subject_id, by = Phi1, bs="re") + s(subject_id, by = Phi2, bs="re")+
+                            s(subject_id, by = Phi3, bs="re") + s(subject_id, by = Phi4, bs="re"), 
+                          method = "fREML", data = right_0.gam.df, discrete = TRUE)
+
+summary(fosr_sex_gen.fri)
+anova(fosr_sex_gen.fri, post_gam.fri, test = "Chisq")
+```
+
+
+```{r fosr_sex_bmi_model}
+df_pred_non_d <- data.frame("sind" = unique(right_0.gam.df$sind), "occasional" = 0, "daily" = 0, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, "female" = 0, "BMI_c" = 0, 
+                          "subject_id" = right_0.gam.df$subject_id[1])
+
+df_pred_non <- data.frame("sind" = unique(right_0.gam.df$sind), "occasional" = 0, "daily" = 0, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = right_0.gam.df$subject_id[1])
+
+pred_f1 <- predict(fosr_sex_gen.fri, newdata=df_pred_non_d, se.fit=TRUE, type = "response")
+pred_f2 <- predict(post_gam.fri, newdata=df_pred_non, se.fit=TRUE, type = "response")
+
+df_pred_occ_d <- data.frame("sind" = unique(right_0.gam.df$sind), "occasional" = 1, "daily" = 0, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, "female" = 0, "BMI_c" = 0, 
+                          "subject_id" = right_0.gam.df$subject_id[1])
+
+df_pred_occ <- data.frame("sind" = unique(right_0.gam.df$sind), "occasional" = 1, "daily" = 0, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = right_0.gam.df$subject_id[1])
+
+pred_f1_1 <- predict(fosr_sex_gen.fri, newdata=df_pred_occ_d, se.fit=TRUE, type = "response")
+pred_f2_1 <- predict(post_gam.fri, newdata=df_pred_occ, se.fit=TRUE, type = "response")
+
+
+df_pred_dly_d <- data.frame("sind" = unique(right_0.gam.df$sind), "occasional" = 0, "daily" = 1, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, "female" = 0, "BMI_c" = 0, 
+                          "subject_id" = right_0.gam.df$subject_id[1])
+
+df_pred_dly <- data.frame("sind" = unique(right_0.gam.df$sind), "occasional" = 0, "daily" = 1, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, 
+                          "subject_id" = right_0.gam.df$subject_id[1])
+
+pred_f1_2 <- predict(fosr_sex_gen.fri, newdata=df_pred_dly_d, se.fit=TRUE, type = "response")
+pred_f2_2 <- predict(post_gam.fri, newdata=df_pred_dly, se.fit=TRUE, type = "response")
+
+df <- data.frame(sec = 0:400/30, 
+                 user_group = c(rep("non-user", 802), 
+                                rep("occasional", 802), 
+                                rep("daily", 802)),
+                 includ_demog = c(rep(1, 401), rep(0, 401), 
+                                  rep(1, 401), rep(0, 401), 
+                                  rep(1, 401), rep(0, 401)),
+                 pct_chg = c(pred_f1$fit, pred_f2$fit, pred_f1_1$fit, pred_f2_1$fit, pred_f1_2$fit, pred_f2_2$fit))
+
+df$includ_demog <- factor(df$includ_demog, 
+                          levels = c(0,1), 
+                          labels = c("Original Model", 
+                                     "Model - Incl Demographics"))
+
+demog_profiles <- ggplot(data = df, aes(x = sec, y = pct_chg, group = paste0(user_group, "_", includ_demog), col = user_group))+
+  geom_line(aes(linetype = as.factor(includ_demog)))+
+  labs(x = "Seconds from start of light test",
+       y = "Percent change in pupil response", 
+       linetype = "Model Type", 
+       col = "Use Group")
+
+```
+
+Coefficient plots of demographic model vs original model
+
+```{r fosr_demog}
+df_pred_occ <- data.frame("sind" = unique(right_0.gam.df$sind), "occasional" = 1, "daily" = 0, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, "female" = 0, "BMI_c" = 0,
+                          "subject_id" = right_0.gam.df$subject_id[1])
+
+df_pred_dly <- data.frame("sind" = unique(right_0.gam.df$sind), "occasional" = 0, "daily" = 1, 
+                            "Phi1" = 0, "Phi2" = 0, "Phi3" = 0, 
+                            "Phi4" = 0, "female" = 0, "BMI_c" = 0, 
+                          "subject_id" = right_0.gam.df$subject_id[1])
+
+pred_f1 <- predict(fosr_sex_gen.fri, newdata=df_pred_occ, se.fit=TRUE, type = "terms")
+pred_f2 <- predict(fosr_sex_gen.fri, newdata=df_pred_dly, se.fit=TRUE, type = "terms")
+
+pred_sex_coef_df <- data.frame(seconds = seq(0, 400)/30,
+                           occ_hat = pred_f1$fit[, 4], 
+                           occ_se = pred_f1$se.fit[, 4], 
+                           dly_hat = pred_f2$fit[, 5], 
+                           dly_se = pred_f2$se.fit[, 5])
+
+pred_sex_coef_df$occ_lci <- pred_sex_coef_df$occ_hat - 2*pred_sex_coef_df$occ_se
+pred_sex_coef_df$occ_uci <- pred_sex_coef_df$occ_hat + 2*pred_sex_coef_df$occ_se
+
+pred_sex_coef_df$dly_lci <- pred_sex_coef_df$dly_hat - 2*pred_sex_coef_df$dly_se
+pred_sex_coef_df$dly_uci <- pred_sex_coef_df$dly_hat + 2*pred_sex_coef_df$dly_se
+
+
+occ_non.sigRegion <- sigRegion(pred_sex_coef_df, crit.val = 0, imp.var = c("seconds", "occ_hat", "occ_lci", "occ_uci"))
+dly_non.sigRegion <- sigRegion(pred_sex_coef_df, crit.val = 0, imp.var = c("seconds", "dly_hat", "dly_lci", "dly_uci"))
+
+
+post_occ_plt <- ggplot(data = pred_sex_coef_df, aes(x=seconds, y = occ_hat))+
+                geom_line()+
+                geom_line(aes(x = seconds, y = occ_hat + 2*occ_se), linetype = "longdash")+
+                geom_line(aes(x = seconds, y = occ_hat - 2*occ_se), linetype = "longdash")+
+                # geom_line(aes(x = seconds, y = 0), col = "darkred")+
+                geom_segment(data=occ_non.sigRegion, aes(x = int.start, y=0, 
+                                                         xend= int.end, yend = 0),
+                                color = "darkred", linewidth =1.2)+
+
+                labs(title = "Occasional use vs No use", 
+                     y= "", 
+                     x = "")+
+                theme_bw()+
+                scale_x_continuous(expand = c(0, 0), limits = c(0,10), 
+                                   breaks = c(0,2,4,6, 8, 10))+
+                scale_y_continuous(limits = c(-7, 7), breaks = c(-6,-4,-2,0,2,4,6))+
+                theme(rect = element_rect(fill = "transparent"))
+
+post_dly_plt <- ggplot(data = pred_sex_coef_df, aes(x=seconds, y = dly_hat))+
+                geom_line()+
+                geom_line(aes(x = seconds, y = dly_hat + 2*dly_se), linetype = "longdash")+
+                geom_line(aes(x = seconds, y = dly_hat - 2*dly_se), linetype = "longdash")+
+                # geom_line(aes(x = seconds, y = 0), col = "darkred")+
+                geom_segment(data=dly_non.sigRegion, aes(x = int.start, y=0, 
+                                                         xend= int.end, yend = 0),
+                                color = "darkred", linewidth =1.2)+
+                labs(title = "Daily use vs No use", 
+                     y = "", 
+                     x = "")+
+                theme_bw()+
+                scale_x_continuous(expand = c(0, 0), limits = c(0,10), 
+                                   breaks = c(0,2,4,6, 8, 10))+
+                scale_y_continuous(limits = c(-7, 7), breaks = c(-6,-4,-2,0,2,4,6))+
+                theme(rect = element_rect(fill = "transparent"))
+
+ylab <- textGrob(label = "Difference in percent change in pupil response", rot = 90, 
+                 gp = gpar(fontsize = 12))
+posval <- textGrob(label = sapply(strwrap("Less Constriction in User", width = 15, simplify = F),
+                                  paste, collapse = "\n"), rot = 0, 
+                 gp = gpar(fontsize = 8))
+negval <- textGrob(label = sapply(strwrap("More Constriction in User", width = 15, simplify = F),
+                                  paste, collapse = "\n"), rot = 0, 
+                 gp = gpar(fontsize = 8))
+
+post_occ_coef <- grid.arrange(ylab, posval, negval, post_occ_plt, 
+                              ncol = 2, nrow = 2, 
+                              layout_matrix = rbind(c(1, 2, rep(4, 15)), c(1, 3, rep(4, 15))))
+
+post_dly_coef <- grid.arrange(ylab, posval, negval, post_dly_plt, 
+                              ncol = 2, nrow = 2, 
+                              layout_matrix = rbind(c(1, 2, rep(4, 15)), c(1, 3, rep(4, 15))))
+
+```
+
+## Review Comment Response Figure
+
+```{r fosr_demogmodel_plots, fig.height=8, fig.width=15, dev='jpeg'}
+demog.fosr <- grid.arrange(demog_profiles, post_occ_coef, 
+                           post_dly_coef, 
+                          layout_matrix = rbind(c(1,2),
+                                                c(3,4)))
+demog.fosr
+```
+

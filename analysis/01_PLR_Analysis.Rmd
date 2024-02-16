@@ -223,6 +223,7 @@ pt.scores <- merge(post_right_scores, pt.analytic.df,
 pt.scores$smoker <- ifelse(pt.scores$user_cat %in% c("daily", "occasional"),1, 0)
 ```
 
+
 ```{r auc, echo = F, message = F}
 auc_inference <- data.frame(subject_id = pt.scores$subject_id, 
                             smoker = pt.scores$smoker,
@@ -304,9 +305,50 @@ auc_inference <- merge(auc_inference, sofr_auc,
                        by = c("subject_id", "smoker"))
 ```
 
+## Concurvity of SoFR model
+```{r concurv}
+concurvity(smk_fglm_ps2)
+
+concurvity(smk_fglm_ps2, full= FALSE)
+```
+
+
 ## New model with sex and bmi as covariates
 ```{r sofr_covariates}
 # original model: smk_fglm_ps2
+pctChg_vars <- names(right_0.post.w)[grepl("percent_change", names(right_0.post.w))]
+pctChg_vars <- pctChg_vars[1:226]
+
+sofr_impute_df <- right_0.post.w[, pctChg_vars]
+rownames(sofr_impute_df) <- rownames(right_0.post.w)
+
+sofr_fpca <- fpca.face(as.matrix(sofr_impute_df))
+sofr_fpca2 <- sofr_fpca$Yhat
+names(sofr_fpca2) <- names(sofr_impute_df)
+
+## Adding in fpca imputed data where missing
+sofr_imputed <- sofr_impute_df
+sofr_imputed[is.na(sofr_imputed)] <-  sofr_fpca2[is.na(sofr_imputed)]
+
+ncols = ncol(sofr_imputed)
+pt.analytic.df$female <- ifelse(pt.analytic.df$demo_gender == "Female", 1, 0)
+smk.df <- pt.analytic.df[, c("subject_id", "user_cat", "female", "BMI_c")]
+smk.df$smoker <- ifelse(pt.analytic.df$user_cat %in% c("daily", "occasional"), 1, 0)
+
+sind <- seq(0, 1, len = ncols)
+smat <- matrix(sind, nrow(smk.df), ncols, byrow = T)
+
+# smk.df$Zsm <- I(Zsm)
+smk.df$Zraw <- I(as.matrix(sofr_imputed))
+smk.df$smat <- I(smat)
+smk.df$lmat <- I(matrix(1/ncols, nrow(smk.df), ncols))
+smk.df$zlmat <- I(smk.df$lmat * smk.df$Zraw)
+# smk.df$bmiMat <- I(replicate(ncol(smk.df$smat), smk.df$BMI))
+# smk.df$femaleMat <- I(replicate(ncol(smk.df$smat), smk.df$female))
+
+smk_fglm_ps3 <- gam(smoker ~ s(smat, by=zlmat, bs = "cr", k = 30), data=smk.df, 
+                   method = "REML", family = binomial)
+summary(smk_fglm_ps3)
 
 # Sex and gender added as scalar features
 smk_fglm_cv <- gam(smoker ~ female + BMI_c +
@@ -314,7 +356,7 @@ smk_fglm_cv <- gam(smoker ~ female + BMI_c +
                    data=smk.df, 
                    method = "REML", family = binomial)
 summary(smk_fglm_cv)
-anova(smk_fglm_cv, smk_fglm_ps2, test = "Chisq")
+anova(smk_fglm_cv, smk_fglm_ps3, test = "Chisq")
 ```
 
 
@@ -452,13 +494,15 @@ sofr_plot
 
 
 ```{r sofr_plot_sex}
+## Covar Adjusted Model
 df_sofr_sex <- data.frame("smat" = seq(0, 1, length.out = ncol(smk.df$smat)),
                       "zlmat" = 1, female = 0, BMI_c = 0)
 sofr_pred_sex<- predict(smk_fglm_cv, newdata = df_sofr_sex, se.fit = TRUE, type = "iterms")
 
+# Original Model (unadjusted)
 df_sofr <- data.frame("smat" = seq(0, 1, length.out = ncol(smk.df$smat)),
                       "zlmat" = 1)
-sofr_pred<- predict(smk_fglm_ps2, newdata = df_sofr, se.fit = TRUE, type = "iterms")
+sofr_pred<- predict(smk_fglm_ps3, newdata = df_sofr, se.fit = TRUE, type = "iterms")
 
 plot.sofr_sex <- data.frame("frame" = 0:(ncol(smk.df$smat) - 1),
                             "model_demog" = sofr_pred_sex$fit[,3],
@@ -466,17 +510,30 @@ plot.sofr_sex <- data.frame("frame" = 0:(ncol(smk.df$smat) - 1),
                             "model_og" = sofr_pred$fit[,1], 
                             "model_og_se" = sofr_pred$se.fit[,1])
 
-sofr_plot_sex <- ggplot(data = plot.sofr_sex, aes(x=frame/30, y = exp(model_og)))+
-  geom_line()+
-  geom_line(aes(x=frame/30, y = exp(model_og-1.96*model_og_se)), linetype = 'longdash')+
-  geom_line(aes(x=frame/30, y = exp(model_og+1.96*model_og_se)), linetype = 'longdash')+
-  geom_line(aes(x = frame/30, y = exp(model_demog)), col = 'red')+
-  geom_line(aes(x=frame/30, y = exp(model_demog-1.96*model_demog_se)), linetype = 'longdash', col = "red")+
-  geom_line(aes(x=frame/30, y = exp(model_demog+1.96*model_demog_se)), linetype = 'longdash', col = "red")+
-  scale_x_continuous(expand = c(0, 0), limits = c(0,10), 
-                     breaks = c(0,2,4,6,8,10))+
-  scale_y_continuous(limits = c(0,8),
-                     breaks = c(0,1,2,3,4,6,8)) +
+plot.sofr_sex$lci <- exp(plot.sofr_sex$model_demog - 1.96*plot.sofr_sex$model_demog_se)
+plot.sofr_sex$uci <- exp(plot.sofr_sex$model_demog + 1.96*plot.sofr_sex$model_demog_se)
+plot.sofr_sex$OR <- exp(plot.sofr_sex$model_demog)
+plot.sofr_sex$sec <- plot.sofr_sex$frame/30
+plot.sofr_sex$p <- exp(plot.sofr_sex$model_demog)/(1+exp(plot.sofr_sex$model_demog))
+
+sofr.sigRegions <- sigRegion(plot.sofr_sex, 1, imp.var = c("sec", "OR", "lci", "uci"))
+
+
+sofr_plot_sex <- ggplot()+
+  geom_rect(data = sofr.sigRegions, aes(xmin = int.start, xmax = int.end, 
+                                        ymin = -Inf, ymax = Inf), fill = "lightpink", alpha = 0.3)+
+  geom_hline(yintercept = 1, col = "darkorange")+
+  geom_line(data = plot.sofr_sex, aes(x=sec, y = exp(model_og)))+
+  geom_line(data = plot.sofr_sex, aes(x=sec, y = exp(model_og-1.96*model_og_se)), linetype = 'longdash')+
+  geom_line(data = plot.sofr_sex, aes(x=sec, y = exp(model_og+1.96*model_og_se)), linetype = 'longdash')+
+  geom_line(data = plot.sofr_sex, aes(x = sec, y = exp(model_demog)), col = 'purple')+
+  geom_line(data = plot.sofr_sex, aes(x=sec, y = exp(model_demog-1.96*model_demog_se)), linetype = 'longdash', col = "purple")+
+  geom_line(data = plot.sofr_sex, aes(x=sec, y = exp(model_demog+1.96*model_demog_se)), linetype = 'longdash', col = "purple")+
+  
+  scale_x_continuous(expand = c(0, 0), limits = c(0,7.5), 
+                     breaks = c(0,2,4,5,6,7))+
+  scale_y_continuous(limits = c(0,5),
+                     breaks = c(0,1,2,3,4,5)) +
   labs(title = "", 
        x = "Seconds after start of light test", 
        y = "Odds ratio between smokers and non-smokers")+
@@ -739,6 +796,11 @@ post_gam.fri <- mgcv::bam(percent_change ~
 
 summary(post_gam.fri)
 ```
+
+```{r fosr_concurv}
+concurvity(post_gam.fri, full = FALSE)
+```
+
 
 
 ```{r getLegend, echo = F}
