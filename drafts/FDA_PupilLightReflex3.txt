@@ -1,9 +1,0 @@
-﻿@misc{RN25,
-   author = {Administration, National Highway Traffic Safety},
-   title = {DWI Detection and Standardized Field Sobriety Test (SFST) Resources},
-   volume = {2023},
-   number = {21 April},
-   url = {https://www.nhtsa.gov/dwi-detection-and-standardized-field-sobriety-test-sfst-resources},
-   type = {Web Page}
-}
-
