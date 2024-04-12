@@ -35,6 +35,7 @@ library(cowplot)
 library(ggpubr)
 library(plotROC)
 library(ggrepel)
+library(patchwork)
 
 knitr::opts_chunk$set(
   warning = FALSE,
@@ -420,7 +421,7 @@ sofr.sigRegions <- sigRegion(plot.sofr, 1, imp.var = c("sec", "OR", "lci", "uci"
 ```
 
 ### Plot SoFR Results
-```{r sofr_plot}
+```{r sofr_plot, fig.width=5, fig.height=5}
 sofr_plot <- ggplot(data = plot.sofr, aes(x=frame/30, y = exp(f0)))+
   geom_line()+
   geom_line(aes(x=frame/30, y = exp(f0-1.96*f0.se)), linetype = 'longdash')+
@@ -471,14 +472,18 @@ plot.roc
 
 ```{r roc_sofr_plots, fig.height= 4, fig.width=8, warning=FALSE, dev='jpeg'}
 
-final.roc <- grid.arrange(plot.roc, sofr_plot, 
-                          layout_matrix = cbind(1,2))
+# final.roc <- grid.arrange(plot.roc, sofr_plot, 
+#                           layout_matrix = cbind(1,2))
 
-labeled.roc.plot <- as_ggplot(final.roc) +
-                    draw_plot_label(label = c("A", "B"), size = 15, 
-                                    x = c(0, 0.5), y = c(1, 1))
+final.roc <- plot.roc + sofr_plot + plot_layout(ncol = 2) + plot_annotation(tag_levels = 'a') &
+  theme(plot.tag.position = c(0,0))
+final.roc
 
-labeled.roc.plot
+# labeled.roc.plot <- as_ggplot(final.roc) +
+#                     draw_plot_label(label = c("A", "B"), size = 15, 
+#                                     x = c(0, 0.5), y = c(1, 1))
+# 
+# labeled.roc.plot
 ```
 
 
